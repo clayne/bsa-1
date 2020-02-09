@@ -12,7 +12,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -562,106 +561,17 @@ namespace bsa
 		};
 
 
-		class file_hasher
+		class dir_hasher
 		{
 		public:
 			inline hash_t operator()(std::string a_path) const
 			{
-				auto [fullPath, stem, extension] = normalize_extended(std::move(a_path));
-				if (stem && extension) {
-					return hash_extended(*stem, *extension);
-				} else {
-					return hash_default(fullPath);
-				}
+				auto fullPath = normalize(std::move(a_path));
+				return hash(fullPath);
 			}
 
 		protected:
-			union extension
-			{
-				constexpr extension() noexcept :
-					i(0)
-				{}
-
-				constexpr extension(std::uint32_t a_val) noexcept :
-					i(a_val)
-				{}
-
-				constexpr extension(const char a_val[4]) noexcept :
-					c{ '\0' }
-				{
-					for (std::size_t idx = 0; idx < 4; ++idx) {
-						c[idx] = a_val[idx];
-					}
-				}
-
-				constexpr extension(const std::string_view& a_val) noexcept :
-					c{ '\0' }
-				{
-					std::size_t idx = 0;
-					while (idx < std::min<std::size_t>(a_val.length(), 4)) {
-						c[idx] = a_val[idx];
-						++idx;
-					}
-					while (idx < 4) {
-						c[idx] = a_val[idx];
-						++idx;
-					}
-				}
-
-				char c[4];
-				std::uint32_t i;
-			};
-
-			inline std::string normalize(std::filesystem::path&& a_path) const
-			{
-				return normalize(a_path);
-			}
-
-			inline std::string normalize(const std::filesystem::path& a_path) const
-			{
-				std::string fullPath = a_path.u8string();
-				for (auto& ch : fullPath) {
-					ch = mapchar(ch);
-				}
-				if (fullPath.empty()) {
-					fullPath.push_back('.');
-				}
-				if (!fullPath.empty() && fullPath.back() == '\\') {
-					fullPath.pop_back();
-				}
-				if (!fullPath.empty() && fullPath.front() == '\\') {
-					fullPath = fullPath.substr(1);
-				}
-
-				return fullPath;
-			}
-
-			inline std::tuple<std::string, std::optional<std::string>, std::optional<std::string>> normalize_extended(std::string a_path) const
-			{
-				std::filesystem::path path(std::move(a_path));
-
-				auto fullPath = normalize(path);
-
-				std::optional<std::string> stem;
-				if (path.has_stem()) {
-					stem.emplace(path.stem().u8string());
-					for (auto& ch : *stem) {
-						ch = mapchar(ch);
-					}
-				}
-
-				std::optional<std::string> extension;
-				if (path.has_extension()) {
-					extension.emplace(path.extension().u8string());
-					for (auto& ch : *extension) {
-						ch = mapchar(ch);
-					}
-				}
-
-				return std::make_tuple(std::move(fullPath), std::move(stem), std::move(extension));
-			}
-
-			inline hash_t hash_default(const std::string& a_fullPath) const noexcept
+			inline hash_t hash(const std::string& a_fullPath) const noexcept
 			{
 				hash_t hash;
 				switch (std::min<std::size_t>(a_fullPath.length(), 3)) {
@@ -685,34 +595,129 @@ namespace bsa
 
 				// skip first and last two chars
 				for (auto it = a_fullPath.begin() + 1; it != a_fullPath.end() - 2; ++it) {
-					hash.crc = *it + hash.crc * 0x1003F;
+					hash.crc = *it + hash.crc * HASH_CONSTANT;
 				}
 
 				return hash;
 			}
 
-			inline hash_t hash_extended(const std::string& a_stem, const std::string& a_extension) const
+			static constexpr std::uint32_t HASH_CONSTANT = 0x1003F;
+
+		private:
+			inline std::string normalize(std::string a_path) const
 			{
-				constexpr extension EXTENSIONS[] = {
-					extension("\0\0\0\0"),
-					extension(".nif"),
-					extension(".kf\0"),
-					extension(".dds"),
-					extension(".wav"),
-					extension(".adp")
+				std::filesystem::path path(std::move(a_path));
+
+				std::string fullPath = path.u8string();
+				for (auto& ch : fullPath) {
+					ch = mapchar(ch);
+				}
+				if (fullPath.empty()) {
+					fullPath.push_back('.');
+				}
+				if (!fullPath.empty() && fullPath.back() == '\\') {
+					fullPath.pop_back();
+				}
+				if (!fullPath.empty() && fullPath.front() == '\\') {
+					fullPath = fullPath.substr(1);
+				}
+
+				return fullPath;
+			}
+		};
+
+
+		class file_hasher : public dir_hasher
+		{
+		public:
+			inline hash_t operator()(std::string a_path) const
+			{
+				auto [stem, extension] = normalize(std::move(a_path));
+				return hash(stem, extension);
+			}
+
+		private:
+			union extension_t
+			{
+				constexpr extension_t() noexcept :
+					i(0)
+				{}
+
+				constexpr extension_t(std::uint32_t a_val) noexcept :
+					i(a_val)
+				{}
+
+				constexpr extension_t(const char a_val[4]) noexcept :
+					c{ '\0' }
+				{
+					for (std::size_t idx = 0; idx < 4; ++idx) {
+						c[idx] = a_val[idx];
+					}
+				}
+
+				constexpr extension_t(const std::string_view& a_val) noexcept :
+					c{ '\0' }
+				{
+					std::size_t idx = 0;
+					while (idx < std::min<std::size_t>(a_val.length(), 4)) {
+						c[idx] = a_val[idx];
+						++idx;
+					}
+					while (idx < 4) {
+						c[idx] = a_val[idx];
+						++idx;
+					}
+				}
+
+				char c[4];
+				std::uint32_t i;
+			};
+
+			inline std::pair<std::string, std::string> normalize(std::string a_path) const
+			{
+				std::filesystem::path path(std::move(a_path));
+
+				std::string stem;
+				if (path.has_stem()) {
+					stem = path.stem().u8string();
+					for (auto& ch : stem) {
+						ch = mapchar(ch);
+					}
+				}
+
+				std::string extension;
+				if (path.has_extension()) {
+					extension = path.extension().u8string();
+					for (auto& ch : extension) {
+						ch = mapchar(ch);
+					}
+				}
+
+				return std::make_pair(std::move(stem), std::move(extension));
+			}
+
+			inline hash_t hash(const std::string& a_stem, const std::string& a_extension) const noexcept
+			{
+				constexpr extension_t EXTENSIONS[] = {
+					extension_t("\0\0\0\0"),
+					extension_t(".nif"),
+					extension_t(".kf\0"),
+					extension_t(".dds"),
+					extension_t(".wav"),
+					extension_t(".adp")
 				};
 
 				constexpr std::size_t SIZE = std::extent_v<decltype(EXTENSIONS)>;
 
-				auto hash = hash_default(a_stem);
+				auto hash = dir_hasher::hash(a_stem);
 
 				std::uint32_t extCRC = 0;
 				for (auto& ch : a_extension) {
-					extCRC = ch + extCRC * 0x1003F;
+					extCRC = ch + extCRC * HASH_CONSTANT;
 				}
 				hash.crc += extCRC;
 
-				extension ext(a_extension);
+				extension_t ext(a_extension);
 				for (std::uint8_t i = 0; i < SIZE; ++i) {
 					if (ext.i == EXTENSIONS[i].i) {
 						hash.first += 32 * (i & 0xFC);
@@ -723,17 +728,6 @@ namespace bsa
 				}
 
 				return hash;
-			}
-		};
-
-
-		class dir_hasher : public file_hasher
-		{
-		public:
-			inline hash_t operator()(std::string a_path) const
-			{
-				auto fullPath = normalize(std::move(a_path));
-				return hash_default(fullPath);
 			}
 		};
 	}
@@ -840,8 +834,7 @@ namespace bsa
 
 				dir.for_each_file([&](const detail::file_t& a_file)
 				{
-					auto full = dir.str() + '\\' + a_file.str();
-					auto hash = detail::file_hasher()(full.c_str());
+					auto hash = detail::file_hasher()(a_file.c_str());
 					if (hash != a_file.hash()) {
 						assert(false);
 					}
