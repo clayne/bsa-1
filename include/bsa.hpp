@@ -214,7 +214,8 @@ namespace bsa
 					fileCount(0),
 					directoryNamesLength(0),
 					fileNamesLength(0),
-					archiveTypes(0)
+					archiveTypes(0),
+					pad(0)
 				{}
 
 				constexpr block_t(const block_t& a_rhs) noexcept :
@@ -226,7 +227,8 @@ namespace bsa
 					fileCount(a_rhs.fileCount),
 					directoryNamesLength(a_rhs.directoryNamesLength),
 					fileNamesLength(a_rhs.fileNamesLength),
-					archiveTypes(a_rhs.archiveTypes)
+					archiveTypes(a_rhs.archiveTypes),
+					pad(a_rhs.pad)
 				{
 					for (std::size_t i = 0; i < sizeof(tag); ++i) {
 						tag[i] = a_rhs.tag[i];
@@ -242,7 +244,8 @@ namespace bsa
 					fileCount(std::move(a_rhs.fileCount)),
 					directoryNamesLength(std::move(a_rhs.directoryNamesLength)),
 					fileNamesLength(std::move(a_rhs.fileNamesLength)),
-					archiveTypes(std::move(a_rhs.archiveTypes))
+					archiveTypes(std::move(a_rhs.archiveTypes)),
+					pad(std::move(a_rhs.pad))
 				{
 					for (std::size_t i = 0; i < sizeof(tag); ++i) {
 						tag[i] = std::move(a_rhs.tag[i]);
@@ -263,6 +266,7 @@ namespace bsa
 						directoryNamesLength = a_rhs.directoryNamesLength;
 						fileNamesLength = a_rhs.fileNamesLength;
 						archiveTypes = a_rhs.archiveTypes;
+						pad = a_rhs.pad;
 					}
 					return *this;
 				}
@@ -281,6 +285,7 @@ namespace bsa
 						directoryNamesLength = std::move(a_rhs.directoryNamesLength);
 						fileNamesLength = std::move(a_rhs.fileNamesLength);
 						archiveTypes = std::move(a_rhs.archiveTypes);
+						pad = std::move(a_rhs.pad);
 					}
 					return *this;
 				}
@@ -294,6 +299,7 @@ namespace bsa
 				std::uint32_t directoryNamesLength;
 				std::uint32_t fileNamesLength;
 				std::uint16_t archiveTypes;
+				std::uint16_t pad;
 			};
 
 			block_t _block;
@@ -368,7 +374,7 @@ namespace bsa
 				std::int8_t last2;
 				std::int8_t length;
 				std::int8_t first;
-				std::int32_t crc;
+				std::uint32_t crc;
 			};
 
 			[[nodiscard]] constexpr block_t& block_ref() noexcept { return _impl.block; }
@@ -405,7 +411,7 @@ namespace bsa
 					return *this;
 				}
 
-				std::int64_t numeric;
+				std::uint64_t numeric;
 				block_t block;
 			};
 
@@ -626,7 +632,7 @@ namespace bsa
 				}
 
 				auto pos = a_input.tellg();
-				a_input.seekg(file_offset() - a_header.file_names_length(), std::ios_base::beg);
+				a_input.seekg(static_cast<std::streamoff>(file_offset() - a_header.file_names_length()), std::ios_base::beg);
 
 				if (a_header.directory_strings()) {
 					std::int8_t length;
@@ -725,6 +731,8 @@ namespace bsa
 		protected:
 			[[nodiscard]] inline hash_t hash(const std::string& a_fullPath) const noexcept
 			{
+				constexpr auto LEN_MAX = static_cast<std::size_t>(std::numeric_limits<std::int8_t>::max());
+
 				hash_t hash;
 				auto& block = hash.block_ref();
 				switch (std::min<std::size_t>(a_fullPath.length(), 3)) {
@@ -741,7 +749,7 @@ namespace bsa
 					break;
 				}
 
-				block.length = static_cast<std::int8_t>(std::min<std::size_t>(a_fullPath.length(), std::numeric_limits<std::int8_t>::max()));
+				block.length = static_cast<std::int8_t>(std::min(a_fullPath.length(), LEN_MAX));
 				if (block.length <= 3) {
 					return hash;
 				}
@@ -938,7 +946,7 @@ namespace bsa
 		[[nodiscard]] inline char first_char() const noexcept { return static_cast<char>(_impl.get().first()); }
 		[[nodiscard]] inline char last_char() const noexcept { return static_cast<char>(_impl.get().last()); }
 		[[nodiscard]] inline std::int8_t length() const noexcept { return _impl.get().length(); }
-		[[nodiscard]] inline std::int64_t numeric_hash() const noexcept { return _impl.get().numeric(); }
+		[[nodiscard]] inline std::uint64_t numeric_hash() const noexcept { return _impl.get().numeric(); }
 		[[nodiscard]] inline char second_to_last_char() const noexcept { return static_cast<char>(_impl.get().last2()); }
 
 	protected:
@@ -1062,23 +1070,23 @@ namespace bsa
 	{
 	public:
 		inline archive() noexcept :
-			_header(),
-			_dirs()
+			_dirs(),
+			_header()
 		{}
 
 		inline archive(const archive& a_archive) :
-			_header(a_archive._header),
-			_dirs(a_archive._dirs)
+			_dirs(a_archive._dirs),
+			_header(a_archive._header)
 		{}
 
 		inline archive(archive&& a_archive) noexcept :
-			_header(std::move(a_archive._header)),
-			_dirs(std::move(a_archive._dirs))
+			_dirs(std::move(a_archive._dirs)),
+			_header(std::move(a_archive._header))
 		{}
 
 		inline archive(std::filesystem::path a_path) :
-			_header(),
-			_dirs()
+			_dirs(),
+			_header()
 		{
 			std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
 			if (file.is_open()) {
@@ -1142,14 +1150,14 @@ namespace bsa
 
 			_header.read(a_input);
 
-			a_input.seekg(_header.header_size(), std::ios_base::beg);
+			a_input.seekg(static_cast<std::streamoff>(_header.header_size()), std::ios_base::beg);
 			for (std::size_t i = 0; i < _header.directory_count(); ++i) {
 				detail::directory_t dir;
 				dir.read(a_input, _header);
 				_dirs.push_back(std::move(dir));
 			}
 
-			std::streampos offset = _header.directory_names_length() + _header.directory_count();	// include prefixed length byte
+			auto offset = static_cast<std::streamoff>(_header.directory_names_length() + _header.directory_count());	// include prefixed length byte
 			offset += _header.file_count() * detail::file_t::block_size();
 			a_input.seekg(offset, std::ios_base::cur);
 
@@ -1250,8 +1258,8 @@ namespace bsa
 			return true;
 		}
 
-		detail::header_t _header;
 		container_type _dirs;
+		detail::header_t _header;
 	};
 
 
