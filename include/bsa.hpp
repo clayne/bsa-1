@@ -26,6 +26,31 @@ namespace bsa
 	using istream_t = std::istream;
 
 
+	using archive_flag = std::uint32_t;	// BSArchive::ARCHIVE_FLAGS
+	static constexpr archive_flag directory_strings_bit = 1 << 0;
+	static constexpr archive_flag file_strings_bit = 1 << 1;
+	static constexpr archive_flag compressed_bit = 1 << 2;
+	static constexpr archive_flag retain_directory_names_bit = 1 << 3;
+	static constexpr archive_flag retain_file_names_bit = 1 << 4;
+	static constexpr archive_flag retain_file_name_offsets_bit = 1 << 5;
+	static constexpr archive_flag xbox_archive_bit = 1 << 6;
+	static constexpr archive_flag retain_strings_during_startup_bit = 1 << 7;
+	static constexpr archive_flag embedded_file_names_bit = 1 << 8;
+	static constexpr archive_flag xbox_compressed_bit = 1 << 9;
+
+
+	using archive_type = std::uint16_t;	// ARCHIVE_TYPE_INDEX
+	static constexpr archive_type meshesbit = 1 << 0;
+	static constexpr archive_type texturesbit = 1 << 1;
+	static constexpr archive_type menusbit = 1 << 2;
+	static constexpr archive_type soundsbit = 1 << 3;
+	static constexpr archive_type voicesbit = 1 << 4;
+	static constexpr archive_type shadersbit = 1 << 5;
+	static constexpr archive_type treesbit = 1 << 6;
+	static constexpr archive_type fontsbit = 1 << 7;
+	static constexpr archive_type miscbit = 1 << 8;
+
+
 	namespace detail
 	{
 		class dir_hasher;
@@ -36,31 +61,11 @@ namespace bsa
 		class header_t;
 
 
-		using archive_flags = std::uint32_t;	// BSArchive::ARCHIVE_FLAGS
-		static constexpr archive_flags directory_strings_bit = 1 << 0;
-		static constexpr archive_flags file_strings_bit = 1 << 1;
-		static constexpr archive_flags compressed_bit = 1 << 2;
-		static constexpr archive_flags retain_directory_names_bit = 1 << 3;
-		static constexpr archive_flags retain_file_names_bit = 1 << 4;
-		static constexpr archive_flags retain_file_name_offsets_bit = 1 << 5;
-		static constexpr archive_flags xbox_archive_bit = 1 << 6;
-		static constexpr archive_flags retain_strings_during_startup_bit = 1 << 7;
-		static constexpr archive_flags embedded_file_names_bit = 1 << 8;
-		static constexpr archive_flags xbox_compressed_bit = 1 << 9;
-
-
-		using archive_type = std::uint16_t;	// ARCHIVE_TYPE_INDEX
-		static constexpr archive_type meshesbit = 1 << 0;
-		static constexpr archive_type texturesbit = 1 << 1;
-		static constexpr archive_type menusbit = 1 << 2;
-		static constexpr archive_type soundsbit = 1 << 3;
-		static constexpr archive_type voicesbit = 1 << 4;
-		static constexpr archive_type shadersbit = 1 << 5;
-		static constexpr archive_type treesbit = 1 << 6;
-		static constexpr archive_type fontsbit = 1 << 7;
-		static constexpr archive_type miscbit = 1 << 8;
-
-
+		// Bethesda uses std::tolower to convert chars to lowercase, however
+		// they use the default C locale to convert the characters,
+		// so I've emulated this functionality, which enables a constexpr
+		// mapping, and allows users to set the locale without encountering
+		// unexpected hashing behavior
 		[[nodiscard]] constexpr char mapchar(char a_ch) noexcept
 		{
 			switch (a_ch) {
@@ -157,14 +162,14 @@ namespace bsa
 
 			[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t); }
 
-			[[nodiscard]] constexpr decltype(auto) archive_type() const noexcept { return _block.archiveType; }
 			[[nodiscard]] constexpr std::size_t directory_count() const noexcept { return static_cast<std::size_t>(_block.directoryCount); }
 			[[nodiscard]] constexpr std::size_t directory_names_length() const noexcept { return static_cast<std::size_t>(_block.directoryNamesLength); }
 			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t>(_block.fileCount); }
 			[[nodiscard]] constexpr std::size_t file_names_length() const noexcept { return static_cast<std::size_t>(_block.fileNamesLength); }
-			[[nodiscard]] constexpr decltype(auto) flags() const noexcept { return _block.flags; }
+			[[nodiscard]] constexpr archive_flag flags() const noexcept { return static_cast<archive_flag>(_block.flags); }
 			[[nodiscard]] constexpr std::size_t header_size() const noexcept { return static_cast<std::size_t>(_block.headerSize); }
 			[[nodiscard]] constexpr std::string_view tag() const { return std::string_view(_block.tag, sizeof(_block.tag)); }
+			[[nodiscard]] constexpr archive_type types() const noexcept { return static_cast<archive_type>(_block.archiveTypes); }
 			[[nodiscard]] constexpr std::size_t version() const noexcept { return static_cast<std::size_t>(_block.version); }
 
 			[[nodiscard]] constexpr bool compressed() const noexcept { return (_block.flags & compressed_bit) != 0; }
@@ -178,15 +183,15 @@ namespace bsa
 			[[nodiscard]] constexpr bool xbox_archive() const noexcept { return (_block.flags & xbox_archive_bit) != 0; }
 			[[nodiscard]] constexpr bool xbox_compressed() const noexcept { return (_block.flags & xbox_compressed_bit) != 0; }
 
-			[[nodiscard]] constexpr bool fonts() const noexcept { return (_block.archiveType & fontsbit) != 0; }
-			[[nodiscard]] constexpr bool meshes() const noexcept { return (_block.archiveType & meshesbit) != 0; }
-			[[nodiscard]] constexpr bool menus() const noexcept { return (_block.archiveType & menusbit) != 0; }
-			[[nodiscard]] constexpr bool misc() const noexcept { return (_block.archiveType & miscbit) != 0; }
-			[[nodiscard]] constexpr bool shaders() const noexcept { return (_block.archiveType & shadersbit) != 0; }
-			[[nodiscard]] constexpr bool sounds() const noexcept { return (_block.archiveType & soundsbit) != 0; }
-			[[nodiscard]] constexpr bool textures() const noexcept { return (_block.archiveType & texturesbit) != 0; }
-			[[nodiscard]] constexpr bool trees() const noexcept { return (_block.archiveType & treesbit) != 0; }
-			[[nodiscard]] constexpr bool voices() const noexcept { return (_block.archiveType & voicesbit) != 0; }
+			[[nodiscard]] constexpr bool fonts() const noexcept { return (_block.archiveTypes & fontsbit) != 0; }
+			[[nodiscard]] constexpr bool meshes() const noexcept { return (_block.archiveTypes & meshesbit) != 0; }
+			[[nodiscard]] constexpr bool menus() const noexcept { return (_block.archiveTypes & menusbit) != 0; }
+			[[nodiscard]] constexpr bool misc() const noexcept { return (_block.archiveTypes & miscbit) != 0; }
+			[[nodiscard]] constexpr bool shaders() const noexcept { return (_block.archiveTypes & shadersbit) != 0; }
+			[[nodiscard]] constexpr bool sounds() const noexcept { return (_block.archiveTypes & soundsbit) != 0; }
+			[[nodiscard]] constexpr bool textures() const noexcept { return (_block.archiveTypes & texturesbit) != 0; }
+			[[nodiscard]] constexpr bool trees() const noexcept { return (_block.archiveTypes & treesbit) != 0; }
+			[[nodiscard]] constexpr bool voices() const noexcept { return (_block.archiveTypes & voicesbit) != 0; }
 
 			inline bool read(istream_t& a_input)
 			{
@@ -209,7 +214,7 @@ namespace bsa
 					fileCount(0),
 					directoryNamesLength(0),
 					fileNamesLength(0),
-					archiveType(0)
+					archiveTypes(0)
 				{}
 
 				constexpr block_t(const block_t& a_rhs) noexcept :
@@ -221,7 +226,7 @@ namespace bsa
 					fileCount(a_rhs.fileCount),
 					directoryNamesLength(a_rhs.directoryNamesLength),
 					fileNamesLength(a_rhs.fileNamesLength),
-					archiveType(a_rhs.archiveType)
+					archiveTypes(a_rhs.archiveTypes)
 				{
 					for (std::size_t i = 0; i < sizeof(tag); ++i) {
 						tag[i] = a_rhs.tag[i];
@@ -237,7 +242,7 @@ namespace bsa
 					fileCount(std::move(a_rhs.fileCount)),
 					directoryNamesLength(std::move(a_rhs.directoryNamesLength)),
 					fileNamesLength(std::move(a_rhs.fileNamesLength)),
-					archiveType(std::move(a_rhs.archiveType))
+					archiveTypes(std::move(a_rhs.archiveTypes))
 				{
 					for (std::size_t i = 0; i < sizeof(tag); ++i) {
 						tag[i] = std::move(a_rhs.tag[i]);
@@ -257,7 +262,7 @@ namespace bsa
 						fileCount = a_rhs.fileCount;
 						directoryNamesLength = a_rhs.directoryNamesLength;
 						fileNamesLength = a_rhs.fileNamesLength;
-						archiveType = a_rhs.archiveType;
+						archiveTypes = a_rhs.archiveTypes;
 					}
 					return *this;
 				}
@@ -275,7 +280,7 @@ namespace bsa
 						fileCount = std::move(a_rhs.fileCount);
 						directoryNamesLength = std::move(a_rhs.directoryNamesLength);
 						fileNamesLength = std::move(a_rhs.fileNamesLength);
-						archiveType = std::move(a_rhs.archiveType);
+						archiveTypes = std::move(a_rhs.archiveTypes);
 					}
 					return *this;
 				}
@@ -288,7 +293,7 @@ namespace bsa
 				std::uint32_t fileCount;
 				std::uint32_t directoryNamesLength;
 				std::uint32_t fileNamesLength;
-				std::uint16_t archiveType;
+				std::uint16_t archiveTypes;
 			};
 
 			block_t _block;
@@ -1056,14 +1061,79 @@ namespace bsa
 	class archive
 	{
 	public:
+		inline archive() noexcept :
+			_header(),
+			_dirs()
+		{}
+
+		inline archive(const archive& a_archive) :
+			_header(a_archive._header),
+			_dirs(a_archive._dirs)
+		{}
+
+		inline archive(archive&& a_archive) noexcept :
+			_header(std::move(a_archive._header)),
+			_dirs(std::move(a_archive._dirs))
+		{}
+
 		inline archive(std::filesystem::path a_path) :
+			_header(),
 			_dirs()
 		{
-			std::ifstream file(a_path, std::ios_base::in | std::ios_base::out | std::ios_base::binary);
+			std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
 			if (file.is_open()) {
 				read(file);
 			}
 		}
+
+		inline archive& operator=(const archive& a_rhs)
+		{
+			if (this != &a_rhs) {
+				_header = a_rhs._header;
+				_dirs = a_rhs._dirs;
+			}
+			return *this;
+		}
+
+		inline archive& operator=(archive&& a_rhs) noexcept
+		{
+			if (this != &a_rhs) {
+				_header = std::move(a_rhs._header);
+				_dirs = std::move(a_rhs._dirs);
+			}
+			return *this;
+		}
+
+		[[nodiscard]] constexpr std::size_t directory_count() const noexcept { return _header.directory_count(); }
+		[[nodiscard]] constexpr std::size_t directory_names_length() const noexcept { return _header.directory_names_length(); }
+		[[nodiscard]] constexpr std::size_t file_count() const noexcept { return _header.file_count(); }
+		[[nodiscard]] constexpr std::size_t file_names_length() const noexcept { return _header.file_names_length(); }
+		[[nodiscard]] constexpr archive_flag flags() const noexcept { return _header.flags(); }
+		[[nodiscard]] constexpr std::size_t header_size() const noexcept { return _header.header_size(); }
+		[[nodiscard]] constexpr std::string_view tag() const { return _header.tag(); }
+		[[nodiscard]] constexpr archive_type types() const noexcept { return _header.types(); }
+		[[nodiscard]] constexpr std::size_t version() const noexcept { return _header.version(); }
+
+		[[nodiscard]] constexpr bool compressed() const noexcept { return _header.compressed(); }
+		[[nodiscard]] constexpr bool directory_strings() const noexcept { return _header.directory_strings(); }
+		[[nodiscard]] constexpr bool embedded_file_names() const noexcept { return _header.embedded_file_names(); }
+		[[nodiscard]] constexpr bool file_strings() const noexcept { return _header.file_strings(); }
+		[[nodiscard]] constexpr bool retain_directory_names() const noexcept { return _header.retain_directory_names(); }
+		[[nodiscard]] constexpr bool retain_file_names() const noexcept { return _header.retain_file_names(); }
+		[[nodiscard]] constexpr bool retain_file_name_offsets() const noexcept { return _header.retain_file_name_offsets(); }
+		[[nodiscard]] constexpr bool retain_strings_during_startup() const noexcept { return _header.retain_strings_during_startup(); }
+		[[nodiscard]] constexpr bool xbox_archive() const noexcept { return _header.xbox_archive(); }
+		[[nodiscard]] constexpr bool xbox_compressed() const noexcept { return _header.xbox_compressed(); }
+
+		[[nodiscard]] constexpr bool fonts() const noexcept { return _header.fonts(); }
+		[[nodiscard]] constexpr bool meshes() const noexcept { return _header.meshes(); }
+		[[nodiscard]] constexpr bool menus() const noexcept { return _header.menus(); }
+		[[nodiscard]] constexpr bool misc() const noexcept { return _header.misc(); }
+		[[nodiscard]] constexpr bool shaders() const noexcept { return _header.shaders(); }
+		[[nodiscard]] constexpr bool sounds() const noexcept { return _header.sounds(); }
+		[[nodiscard]] constexpr bool textures() const noexcept { return _header.textures(); }
+		[[nodiscard]] constexpr bool trees() const noexcept { return _header.trees(); }
+		[[nodiscard]] constexpr bool voices() const noexcept { return _header.voices(); }
 
 		inline void read(istream_t& a_input)
 		{
@@ -1120,9 +1190,9 @@ namespace bsa
 	protected:
 		friend class directory_iterator;
 
-		using directory_container = std::vector<detail::directory_t>;
-		using iterator = typename directory_container::iterator;
-		using const_iterator = typename directory_container::const_iterator;
+		using container_type = std::vector<detail::directory_t>;
+		using iterator = typename container_type::iterator;
+		using const_iterator = typename container_type::const_iterator;
 
 		[[nodiscard]] inline iterator begin() noexcept { return _dirs.begin(); }
 		[[nodiscard]] inline const_iterator begin() const noexcept { return _dirs.begin(); }
@@ -1181,7 +1251,7 @@ namespace bsa
 		}
 
 		detail::header_t _header;
-		directory_container _dirs;
+		container_type _dirs;
 	};
 
 
@@ -1358,7 +1428,7 @@ namespace bsa
 
 		static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
 
-		std::optional<std::vector<file>> _files;
+		std::optional<std::vector<value_type>> _files;
 		std::size_t _pos;
 	};
 }
