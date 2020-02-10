@@ -15,6 +15,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <iostream>
@@ -192,6 +193,8 @@ namespace bsa
 			[[nodiscard]] constexpr bool textures() const noexcept { return (_block.archiveTypes & texturesbit) != 0; }
 			[[nodiscard]] constexpr bool trees() const noexcept { return (_block.archiveTypes & treesbit) != 0; }
 			[[nodiscard]] constexpr bool voices() const noexcept { return (_block.archiveTypes & voicesbit) != 0; }
+
+			constexpr void clear() noexcept { _block = block_t(); }
 
 			inline bool read(istream_t& a_input)
 			{
@@ -595,12 +598,36 @@ namespace bsa
 				return *this;
 			}
 
-			[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t) + hash_t::block_size(); }
+			[[nodiscard]] static constexpr std::size_t block_size_103() noexcept { return sizeof(block103_t) + hash_t::block_size(); }
+			[[nodiscard]] static constexpr std::size_t block_size_105() noexcept { return sizeof(block105_t) + hash_t::block_size(); }
 
 			[[nodiscard]] inline const char* c_str() const noexcept { return _name.c_str(); }
 
-			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t>(_block.fileCount); }
-			[[nodiscard]] constexpr std::uint64_t file_offset() const noexcept { return static_cast<std::uint64_t>(_block.fileOffset); }
+			[[nodiscard]] constexpr std::size_t file_count() const noexcept
+			{
+				switch (_block.index()) {
+				case v103:
+					return static_cast<std::size_t>(std::get<v103>(_block).fileCount);
+				case v105:
+					return static_cast<std::size_t>(std::get<v105>(_block).fileCount);
+				default:
+					assert(false);
+					return 0;
+				}
+			}
+
+			[[nodiscard]] constexpr std::uint64_t file_offset() const noexcept
+			{
+				switch (_block.index()) {
+				case v103:
+					return static_cast<std::uint64_t>(std::get<v103>(_block).fileOffset);
+				case v105:
+					return static_cast<std::uint64_t>(std::get<v105>(_block).fileOffset);
+				default:
+					assert(false);
+					return std::numeric_limits<std::uint64_t>::max();
+				}
+			}
 
 			[[nodiscard]] constexpr hash_t hash() const noexcept { return _hash; }
 			[[nodiscard]] constexpr hash_t& hash_ref() noexcept { return _hash; }
@@ -623,14 +650,146 @@ namespace bsa
 					return false;
 				}
 
-				if (!a_input.read(reinterpret_cast<char*>(&_block), sizeof(_block))) {
+				switch (a_header.version()) {
+				case 103:
+				case 104:
+					{
+						block103_t block;
+						if (!block.read(a_input)) {
+							return false;
+						}
+						_block.emplace<v103>(std::move(block));
+					}
+					break;
+				case 105:
+					{
+						block105_t block;
+						if (!block.read(a_input)) {
+							return false;
+						}
+						_block.emplace<v105>(std::move(block));
+					}
+					break;
+				default:
+					assert(false);
 					return false;
 				}
 
-				if (!a_header.directory_strings() && file_count() == 0) {
+				if (a_header.directory_strings() || file_count() > 0) {
+					return read_extra(a_input, a_header);
+				}
+
+				return true;
+			}
+
+		private:
+			enum { v103, v105 };
+
+			// same as 104
+			struct block103_t	// BSDirectoryEntry x86
+			{
+				constexpr block103_t() noexcept :
+					fileCount(0),
+					fileOffset(0)
+				{}
+
+				constexpr block103_t(const block103_t& a_rhs) noexcept :
+					fileCount(a_rhs.fileCount),
+					fileOffset(a_rhs.fileOffset)
+				{}
+
+				constexpr block103_t(block103_t&& a_rhs) noexcept :
+					fileCount(std::move(a_rhs.fileCount)),
+					fileOffset(std::move(a_rhs.fileOffset))
+				{}
+
+				constexpr block103_t& operator=(const block103_t& a_rhs) noexcept
+				{
+					if (this != &a_rhs) {
+						fileCount = a_rhs.fileCount;
+						fileOffset = a_rhs.fileOffset;
+					}
+					return *this;
+				}
+
+				constexpr block103_t& operator=(block103_t&& a_rhs) noexcept
+				{
+					if (this != &a_rhs) {
+						fileCount = std::move(a_rhs.fileCount);
+						fileOffset = std::move(a_rhs.fileOffset);
+					}
+					return *this;
+				}
+
+				inline bool read(istream_t& a_input)
+				{
+					if (!a_input.read(reinterpret_cast<char*>(this), sizeof(block103_t))) {
+						return false;
+					}
+
 					return true;
 				}
 
+				std::uint32_t fileCount;
+				std::uint32_t fileOffset;
+			};
+
+			struct block105_t	// BSDirectoryEntry x64
+			{
+				constexpr block105_t() noexcept :
+					fileCount(0),
+					pad(0),
+					fileOffset(0)
+				{}
+
+				constexpr block105_t(const block105_t& a_rhs) noexcept :
+					fileCount(a_rhs.fileCount),
+					pad(a_rhs.pad),
+					fileOffset(a_rhs.fileOffset)
+				{}
+
+				constexpr block105_t(block105_t&& a_rhs) noexcept :
+					fileCount(std::move(a_rhs.fileCount)),
+					pad(std::move(a_rhs.pad)),
+					fileOffset(std::move(a_rhs.fileOffset))
+				{}
+
+				constexpr block105_t& operator=(const block105_t& a_rhs) noexcept
+				{
+					if (this != &a_rhs) {
+						fileCount = a_rhs.fileCount;
+						pad = a_rhs.pad;
+						fileOffset = a_rhs.fileOffset;
+					}
+					return *this;
+				}
+
+				constexpr block105_t& operator=(block105_t&& a_rhs) noexcept
+				{
+					if (this != &a_rhs) {
+						fileCount = std::move(a_rhs.fileCount);
+						pad = std::move(a_rhs.pad);
+						fileOffset = std::move(a_rhs.fileOffset);
+					}
+					return *this;
+				}
+
+				inline bool read(istream_t& a_input)
+				{
+					if (!a_input.read(reinterpret_cast<char*>(this), sizeof(block105_t))) {
+						return false;
+					}
+
+					return true;
+				}
+
+				std::uint32_t fileCount;
+				std::uint32_t pad;
+				std::uint64_t fileOffset;
+			};
+
+			inline bool read_extra(istream_t& a_input, const header_t& a_header)
+			{
 				auto pos = a_input.tellg();
 				a_input.seekg(static_cast<std::streamoff>(file_offset() - a_header.file_names_length()), std::ios_base::beg);
 
@@ -655,58 +814,11 @@ namespace bsa
 				}
 
 				a_input.seekg(pos, std::ios_base::beg);
-
 				return true;
 			}
 
-		private:
-			struct block_t	// BSDirectoryEntry
-			{
-				constexpr block_t() noexcept :
-					fileCount(0),
-					pad(0),
-					fileOffset(0)
-				{}
-
-				constexpr block_t(const block_t& a_rhs) noexcept :
-					fileCount(a_rhs.fileCount),
-					pad(a_rhs.pad),
-					fileOffset(a_rhs.fileOffset)
-				{}
-
-				constexpr block_t(block_t&& a_rhs) noexcept :
-					fileCount(std::move(a_rhs.fileCount)),
-					pad(std::move(a_rhs.pad)),
-					fileOffset(std::move(a_rhs.fileOffset))
-				{}
-
-				constexpr block_t& operator=(const block_t& a_rhs) noexcept
-				{
-					if (this != &a_rhs) {
-						fileCount = a_rhs.fileCount;
-						pad = a_rhs.pad;
-						fileOffset = a_rhs.fileOffset;
-					}
-					return *this;
-				}
-
-				constexpr block_t& operator=(block_t&& a_rhs) noexcept
-				{
-					if (this != &a_rhs) {
-						fileCount = std::move(a_rhs.fileCount);
-						pad = std::move(a_rhs.pad);
-						fileOffset = std::move(a_rhs.fileOffset);
-					}
-					return *this;
-				}
-
-				std::uint32_t fileCount;
-				std::uint32_t pad;
-				std::uint64_t fileOffset;
-			};
-
 			hash_t _hash;
-			block_t _block;
+			std::variant<block103_t, block105_t> _block;
 			std::string _name;
 			container_type _files;
 		};
@@ -722,9 +834,9 @@ namespace bsa
 			dir_hasher& operator=(const dir_hasher&) = default;
 			dir_hasher& operator=(dir_hasher&&) = default;
 
-			[[nodiscard]] inline hash_t operator()(std::string a_path) const
+			[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
 			{
-				auto fullPath = normalize(std::move(a_path));
+				auto fullPath = normalize(a_path);
 				return hash(fullPath);
 			}
 
@@ -765,11 +877,11 @@ namespace bsa
 			static constexpr std::uint32_t HASH_CONSTANT = 0x1003F;
 
 		private:
-			[[nodiscard]] inline std::string normalize(std::string a_path) const
+			[[nodiscard]] inline std::string normalize(std::string_view a_path) const
 			{
-				std::filesystem::path path(std::move(a_path));
+				std::filesystem::path path(a_path);
 
-				std::string fullPath = path.u8string();
+				std::string fullPath = path.string();
 				for (auto& ch : fullPath) {
 					ch = mapchar(ch);
 				}
@@ -798,9 +910,9 @@ namespace bsa
 			file_hasher& operator=(const file_hasher&) = default;
 			file_hasher& operator=(file_hasher&&) = default;
 
-			[[nodiscard]] inline hash_t operator()(std::string a_path) const
+			[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
 			{
-				auto [stem, extension] = normalize(std::move(a_path));
+				auto [stem, extension] = normalize(a_path);
 				return hash(stem, extension);
 			}
 
@@ -841,13 +953,13 @@ namespace bsa
 				std::uint32_t i;
 			};
 
-			[[nodiscard]] inline std::pair<std::string, std::string> normalize(std::string a_path) const
+			[[nodiscard]] inline std::pair<std::string, std::string> normalize(std::string_view a_path) const
 			{
-				std::filesystem::path path(std::move(a_path));
+				std::filesystem::path path(a_path);
 
 				std::string stem;
 				if (path.has_stem()) {
-					stem = path.stem().u8string();
+					stem = path.stem().string();
 					for (auto& ch : stem) {
 						ch = mapchar(ch);
 					}
@@ -855,7 +967,7 @@ namespace bsa
 
 				std::string extension;
 				if (path.has_extension()) {
-					extension = path.extension().u8string();
+					extension = path.extension().string();
 					for (auto& ch : extension) {
 						ch = mapchar(ch);
 					}
@@ -1084,14 +1196,11 @@ namespace bsa
 			_header(std::move(a_archive._header))
 		{}
 
-		inline archive(std::filesystem::path a_path) :
+		inline archive(const std::filesystem::path& a_path) :
 			_dirs(),
 			_header()
 		{
-			std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
-			if (file.is_open()) {
-				read(file);
-			}
+			read(a_path);
 		}
 
 		inline archive& operator=(const archive& a_rhs)
@@ -1143,12 +1252,26 @@ namespace bsa
 		[[nodiscard]] constexpr bool trees() const noexcept { return _header.trees(); }
 		[[nodiscard]] constexpr bool voices() const noexcept { return _header.voices(); }
 
+		inline void read(const std::filesystem::path& a_path)
+		{
+			std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
+			if (file.is_open()) {
+				read(file);
+			}
+		}
+
 		inline void read(istream_t& a_input)
 		{
 			assert(a_input);
 			_dirs.clear();
+			_header.clear();
 
 			_header.read(a_input);
+
+			if (_header.xbox_archive()) {	// no support for xbox archives yet
+				assert(false);
+				return;
+			}
 
 			a_input.seekg(static_cast<std::streamoff>(_header.header_size()), std::ios_base::beg);
 			for (std::size_t i = 0; i < _header.directory_count(); ++i) {
@@ -1242,13 +1365,13 @@ namespace bsa
 		inline bool sanity_check()
 		{
 			for (const auto& dir : _dirs) {
-				auto dHash = detail::dir_hasher()(dir.str());
+				auto dHash = detail::dir_hasher()(dir.str_ref());
 				if (dHash != dir.hash()) {
 					assert(false);
 				}
 
 				for (const auto& file : dir) {
-					auto fHash = detail::file_hasher()(file.c_str());
+					auto fHash = detail::file_hasher()(file.str_ref());
 					if (fHash != file.hash()) {
 						assert(false);
 					}
