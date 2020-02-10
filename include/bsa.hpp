@@ -457,6 +457,8 @@ namespace bsa
 			[[nodiscard]] constexpr hash_t& hash_ref() noexcept { return _hash; }
 			[[nodiscard]] constexpr const hash_t& hash_ref() const noexcept { return _hash; }
 
+			[[nodiscard]] constexpr std::size_t offset() const noexcept { return static_cast<std::size_t>(_block.offset); }
+
 			[[nodiscard]] constexpr std::size_t size() const noexcept { return static_cast<std::size_t>(_block.size); }
 
 			[[nodiscard]] inline std::string str() const { return _name; }
@@ -582,7 +584,7 @@ namespace bsa
 
 			[[nodiscard]] inline const char* c_str() const noexcept { return _name.c_str(); }
 
-			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t>(_block.filesCount); }
+			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t>(_block.fileCount); }
 			[[nodiscard]] constexpr std::uint64_t file_offset() const noexcept { return static_cast<std::uint64_t>(_block.fileOffset); }
 
 			[[nodiscard]] constexpr hash_t hash() const noexcept { return _hash; }
@@ -654,19 +656,19 @@ namespace bsa
 			struct block_t	// BSDirectoryEntry
 			{
 				constexpr block_t() noexcept :
-					filesCount(0),
+					fileCount(0),
 					pad(0),
 					fileOffset(0)
 				{}
 
 				constexpr block_t(const block_t& a_rhs) noexcept :
-					filesCount(a_rhs.filesCount),
+					fileCount(a_rhs.fileCount),
 					pad(a_rhs.pad),
 					fileOffset(a_rhs.fileOffset)
 				{}
 
 				constexpr block_t(block_t&& a_rhs) noexcept :
-					filesCount(std::move(a_rhs.filesCount)),
+					fileCount(std::move(a_rhs.fileCount)),
 					pad(std::move(a_rhs.pad)),
 					fileOffset(std::move(a_rhs.fileOffset))
 				{}
@@ -674,7 +676,7 @@ namespace bsa
 				constexpr block_t& operator=(const block_t& a_rhs) noexcept
 				{
 					if (this != &a_rhs) {
-						filesCount = a_rhs.filesCount;
+						fileCount = a_rhs.fileCount;
 						pad = a_rhs.pad;
 						fileOffset = a_rhs.fileOffset;
 					}
@@ -684,14 +686,14 @@ namespace bsa
 				constexpr block_t& operator=(block_t&& a_rhs) noexcept
 				{
 					if (this != &a_rhs) {
-						filesCount = std::move(a_rhs.filesCount);
+						fileCount = std::move(a_rhs.fileCount);
 						pad = std::move(a_rhs.pad);
 						fileOffset = std::move(a_rhs.fileOffset);
 					}
 					return *this;
 				}
 
-				std::uint32_t filesCount;
+				std::uint32_t fileCount;
 				std::uint32_t pad;
 				std::uint64_t fileOffset;
 			};
