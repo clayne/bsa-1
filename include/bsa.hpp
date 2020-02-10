@@ -23,6 +23,9 @@
 
 namespace bsa
 {
+	using istream_t = std::istream;
+
+
 	namespace detail
 	{
 		class dir_hasher;
@@ -32,47 +35,30 @@ namespace bsa
 		class hash_t;
 		class header_t;
 
-		enum class archive_flags : std::uint32_t	// BSArchive::ARCHIVE_FLAGS
-		{
-			dir_strings = 1 << 0,
-			file_strings = 1 << 1,
-			compressed = 1 << 2,
-			retain_directory_names = 1 << 3,
-			retain_file_names = 1 << 4,
-			retain_file_name_offsets = 1 << 5,
-			xbox_archive = 1 << 6,
-			retain_strings_during_startup = 1 << 7,
-			embedded_file_names = 1 << 8,
-			xbox_compressed = 1 << 9
-		};
+
+		using archive_flags = std::uint32_t;	// BSArchive::ARCHIVE_FLAGS
+		static constexpr archive_flags directory_strings_bit = 1 << 0;
+		static constexpr archive_flags file_strings_bit = 1 << 1;
+		static constexpr archive_flags compressed_bit = 1 << 2;
+		static constexpr archive_flags retain_directory_names_bit = 1 << 3;
+		static constexpr archive_flags retain_file_names_bit = 1 << 4;
+		static constexpr archive_flags retain_file_name_offsets_bit = 1 << 5;
+		static constexpr archive_flags xbox_archive_bit = 1 << 6;
+		static constexpr archive_flags retain_strings_during_startup_bit = 1 << 7;
+		static constexpr archive_flags embedded_file_names_bit = 1 << 8;
+		static constexpr archive_flags xbox_compressed_bit = 1 << 9;
 
 
-		enum class archive_type : std::uint16_t	// ARCHIVE_TYPE_INDEX
-		{
-			meshes = 1 << 0,
-			textures = 1 << 1,
-			menus = 1 << 2,
-			sounds = 1 << 3,
-			voices = 1 << 4,
-			shaders = 1 << 5,
-			trees = 1 << 6,
-			fonts = 1 << 7,
-			misc = 1 << 8
-		};
-
-
-		template <class Enum>
-		[[nodiscard]] constexpr decltype(auto) to_underlying(const Enum& a_enum) noexcept
-		{
-			return static_cast<std::underlying_type_t<Enum>>(a_enum);
-		}
-
-
-		template <class Enum>
-		[[nodiscard]] constexpr decltype(auto) to_underlying(Enum&& a_enum) noexcept
-		{
-			return static_cast<std::underlying_type_t<Enum>>(a_enum);
-		}
+		using archive_type = std::uint16_t;	// ARCHIVE_TYPE_INDEX
+		static constexpr archive_type meshesbit = 1 << 0;
+		static constexpr archive_type texturesbit = 1 << 1;
+		static constexpr archive_type menusbit = 1 << 2;
+		static constexpr archive_type soundsbit = 1 << 3;
+		static constexpr archive_type voicesbit = 1 << 4;
+		static constexpr archive_type shadersbit = 1 << 5;
+		static constexpr archive_type treesbit = 1 << 6;
+		static constexpr archive_type fontsbit = 1 << 7;
+		static constexpr archive_type miscbit = 1 << 8;
 
 
 		[[nodiscard]] constexpr char mapchar(char a_ch) noexcept
@@ -141,17 +127,68 @@ namespace bsa
 		class header_t
 		{
 		public:
-			constexpr header_t() noexcept : _block() {}
+			constexpr header_t() noexcept :
+				_block()
+			{}
 
+			constexpr header_t(const header_t& a_rhs) noexcept :
+				_block(a_rhs._block)
+			{}
+
+			constexpr header_t(header_t&& a_rhs) noexcept :
+				_block(std::move(a_rhs._block))
+			{}
+
+			constexpr header_t& operator=(const header_t& a_rhs) noexcept
+			{
+				if (this != &a_rhs) {
+					_block = a_rhs._block;
+				}
+				return *this;
+			}
+
+			constexpr header_t& operator=(header_t&& a_rhs) noexcept
+			{
+				if (this != &a_rhs) {
+					_block = std::move(a_rhs._block);
+				}
+				return *this;
+			}
+
+			[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t); }
+
+			[[nodiscard]] constexpr decltype(auto) archive_type() const noexcept { return _block.archiveType; }
 			[[nodiscard]] constexpr std::size_t directory_count() const noexcept { return static_cast<std::size_t>(_block.directoryCount); }
 			[[nodiscard]] constexpr std::size_t directory_names_length() const noexcept { return static_cast<std::size_t>(_block.directoryNamesLength); }
-			[[nodiscard]] constexpr bool directory_strings() const noexcept { return (_block.flags & to_underlying(archive_flags::dir_strings)) != 0; }
 			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t>(_block.fileCount); }
 			[[nodiscard]] constexpr std::size_t file_names_length() const noexcept { return static_cast<std::size_t>(_block.fileNamesLength); }
-			[[nodiscard]] constexpr bool file_strings() const noexcept { return (_block.flags & to_underlying(archive_flags::file_strings)) != 0; }
+			[[nodiscard]] constexpr decltype(auto) flags() const noexcept { return _block.flags; }
 			[[nodiscard]] constexpr std::size_t header_size() const noexcept { return static_cast<std::size_t>(_block.headerSize); }
+			[[nodiscard]] constexpr std::string_view tag() const { return std::string_view(_block.tag, sizeof(_block.tag)); }
+			[[nodiscard]] constexpr std::size_t version() const noexcept { return static_cast<std::size_t>(_block.version); }
 
-			inline bool read(std::istream& a_input)
+			[[nodiscard]] constexpr bool compressed() const noexcept { return (_block.flags & compressed_bit) != 0; }
+			[[nodiscard]] constexpr bool directory_strings() const noexcept { return (_block.flags & directory_strings_bit) != 0; }
+			[[nodiscard]] constexpr bool embedded_file_names() const noexcept { return (_block.flags & embedded_file_names_bit) != 0; }
+			[[nodiscard]] constexpr bool file_strings() const noexcept { return (_block.flags & file_strings_bit) != 0; }
+			[[nodiscard]] constexpr bool retain_directory_names() const noexcept { return (_block.flags & retain_directory_names_bit) != 0; }
+			[[nodiscard]] constexpr bool retain_file_names() const noexcept { return (_block.flags & retain_file_names_bit) != 0; }
+			[[nodiscard]] constexpr bool retain_file_name_offsets() const noexcept { return (_block.flags & retain_file_name_offsets_bit) != 0; }
+			[[nodiscard]] constexpr bool retain_strings_during_startup() const noexcept { return (_block.flags & retain_strings_during_startup_bit) != 0; }
+			[[nodiscard]] constexpr bool xbox_archive() const noexcept { return (_block.flags & xbox_archive_bit) != 0; }
+			[[nodiscard]] constexpr bool xbox_compressed() const noexcept { return (_block.flags & xbox_compressed_bit) != 0; }
+
+			[[nodiscard]] constexpr bool fonts() const noexcept { return (_block.archiveType & fontsbit) != 0; }
+			[[nodiscard]] constexpr bool meshes() const noexcept { return (_block.archiveType & meshesbit) != 0; }
+			[[nodiscard]] constexpr bool menus() const noexcept { return (_block.archiveType & menusbit) != 0; }
+			[[nodiscard]] constexpr bool misc() const noexcept { return (_block.archiveType & miscbit) != 0; }
+			[[nodiscard]] constexpr bool shaders() const noexcept { return (_block.archiveType & shadersbit) != 0; }
+			[[nodiscard]] constexpr bool sounds() const noexcept { return (_block.archiveType & soundsbit) != 0; }
+			[[nodiscard]] constexpr bool textures() const noexcept { return (_block.archiveType & texturesbit) != 0; }
+			[[nodiscard]] constexpr bool trees() const noexcept { return (_block.archiveType & treesbit) != 0; }
+			[[nodiscard]] constexpr bool voices() const noexcept { return (_block.archiveType & voicesbit) != 0; }
+
+			inline bool read(istream_t& a_input)
 			{
 				if (!a_input.read(reinterpret_cast<char*>(&_block), sizeof(_block))) {
 					return false;
@@ -174,6 +211,74 @@ namespace bsa
 					fileNamesLength(0),
 					archiveType(0)
 				{}
+
+				constexpr block_t(const block_t& a_rhs) noexcept :
+					tag{ '\0' },
+					version(a_rhs.version),
+					headerSize(a_rhs.headerSize),
+					flags(a_rhs.flags),
+					directoryCount(a_rhs.directoryCount),
+					fileCount(a_rhs.fileCount),
+					directoryNamesLength(a_rhs.directoryNamesLength),
+					fileNamesLength(a_rhs.fileNamesLength),
+					archiveType(a_rhs.archiveType)
+				{
+					for (std::size_t i = 0; i < sizeof(tag); ++i) {
+						tag[i] = a_rhs.tag[i];
+					}
+				}
+
+				constexpr block_t(block_t&& a_rhs) noexcept :
+					tag{ '\0' },
+					version(std::move(a_rhs.version)),
+					headerSize(std::move(a_rhs.headerSize)),
+					flags(std::move(a_rhs.flags)),
+					directoryCount(std::move(a_rhs.directoryCount)),
+					fileCount(std::move(a_rhs.fileCount)),
+					directoryNamesLength(std::move(a_rhs.directoryNamesLength)),
+					fileNamesLength(std::move(a_rhs.fileNamesLength)),
+					archiveType(std::move(a_rhs.archiveType))
+				{
+					for (std::size_t i = 0; i < sizeof(tag); ++i) {
+						tag[i] = std::move(a_rhs.tag[i]);
+					}
+				}
+
+				constexpr block_t& operator=(const block_t& a_rhs) noexcept
+				{
+					if (this != &a_rhs) {
+						for (std::size_t i = 0; i < sizeof(tag); ++i) {
+							tag[i] = a_rhs.tag[i];
+						}
+						version = a_rhs.version;
+						headerSize = a_rhs.headerSize;
+						flags = a_rhs.flags;
+						directoryCount = a_rhs.directoryCount;
+						fileCount = a_rhs.fileCount;
+						directoryNamesLength = a_rhs.directoryNamesLength;
+						fileNamesLength = a_rhs.fileNamesLength;
+						archiveType = a_rhs.archiveType;
+					}
+					return *this;
+				}
+
+				constexpr block_t& operator=(block_t&& a_rhs) noexcept
+				{
+					if (this != &a_rhs) {
+						for (std::size_t i = 0; i < sizeof(tag); ++i) {
+							tag[i] = std::move(a_rhs.tag[i]);
+						}
+						version = std::move(a_rhs.version);
+						headerSize = std::move(a_rhs.headerSize);
+						flags = std::move(a_rhs.flags);
+						directoryCount = std::move(a_rhs.directoryCount);
+						fileCount = std::move(a_rhs.fileCount);
+						directoryNamesLength = std::move(a_rhs.directoryNamesLength);
+						fileNamesLength = std::move(a_rhs.fileNamesLength);
+						archiveType = std::move(a_rhs.archiveType);
+					}
+					return *this;
+				}
 
 				char tag[4];
 				std::uint32_t version;
@@ -239,7 +344,7 @@ namespace bsa
 
 			[[nodiscard]] constexpr std::uint64_t numeric() const noexcept { return _impl.numeric; }
 
-			inline bool read(std::istream& a_input)
+			inline bool read(istream_t& a_input)
 			{
 				if (!a_input.read(reinterpret_cast<char*>(&_impl.block), sizeof(_impl.block))) {
 					return false;
@@ -357,7 +462,7 @@ namespace bsa
 			[[nodiscard]] inline std::string str() const { return _name; }
 			[[nodiscard]] constexpr const std::string& str_ref() const noexcept { return _name; }
 
-			inline bool read(std::istream& a_input)
+			inline bool read(istream_t& a_input)
 			{
 				if (!_hash.read(a_input)) {
 					return false;
@@ -370,7 +475,7 @@ namespace bsa
 				return true;
 			}
 
-			inline bool read_name(std::istream& a_input)
+			inline bool read_name(istream_t& a_input)
 			{
 				char ch;
 				do {
@@ -473,6 +578,8 @@ namespace bsa
 				return *this;
 			}
 
+			[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t) + hash_t::block_size(); }
+
 			[[nodiscard]] inline const char* c_str() const noexcept { return _name.c_str(); }
 
 			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t>(_block.filesCount); }
@@ -501,7 +608,7 @@ namespace bsa
 				}
 			}
 
-			inline bool read(std::istream& a_input, const header_t& a_header)
+			inline bool read(istream_t& a_input, const header_t& a_header)
 			{
 				if (!_hash.read(a_input)) {
 					return false;
@@ -955,7 +1062,7 @@ namespace bsa
 			}
 		}
 
-		inline void read(std::istream& a_input)
+		inline void read(istream_t& a_input)
 		{
 			assert(a_input);
 			_dirs.clear();
@@ -982,7 +1089,7 @@ namespace bsa
 				}
 			}
 
-			sanity_check();
+			assert(sanity_check());
 
 			[[maybe_unused]] bool dummy = true;
 		}
@@ -1053,7 +1160,7 @@ namespace bsa
 			std::vector<std::string> files;
 		};
 
-		inline void sanity_check()
+		inline bool sanity_check()
 		{
 			for (const auto& dir : _dirs) {
 				auto hash = detail::dir_hasher()(dir.str());
@@ -1069,6 +1176,8 @@ namespace bsa
 					}
 				});
 			}
+
+			return true;
 		}
 
 		detail::header_t _header;
@@ -1128,11 +1237,7 @@ namespace bsa
 			return *this;
 		}
 
-		[[nodiscard]] friend constexpr bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept
-		{
-			return !a_lhs._dirs && !a_rhs._dirs;
-		}
-
+		[[nodiscard]] friend constexpr bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !a_lhs._dirs && !a_rhs._dirs; }
 		[[nodiscard]] friend constexpr bool operator!=(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
 
 		[[nodiscard]] inline reference operator*() { return fetch(); }
