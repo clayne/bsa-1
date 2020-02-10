@@ -26,7 +26,11 @@ namespace bsa
 	namespace detail
 	{
 		class dir_hasher;
+		class directory_t;
 		class file_hasher;
+		class file_t;
+		class hash_t;
+		class header_t;
 
 		enum class archive_flags : std::uint32_t	// BSArchive::ARCHIVE_FLAGS
 		{
@@ -1080,7 +1084,7 @@ namespace bsa
 
 		inline directory_iterator() noexcept :
 			_dirs(std::nullopt),
-			_pos()
+			_pos(NPOS)
 		{}
 
 		inline directory_iterator(const directory_iterator& a_rhs) :
@@ -1091,11 +1095,13 @@ namespace bsa
 		inline directory_iterator(directory_iterator&& a_rhs) noexcept :
 			_dirs(std::move(a_rhs._dirs)),
 			_pos(std::move(a_rhs._pos))
-		{}
+		{
+			a_rhs._pos = NPOS;
+		}
 
 		explicit inline directory_iterator(const archive& a_archive) :
 			_dirs(std::in_place_t()),
-			_pos()
+			_pos(0)
 		{
 			auto& arch = const_cast<archive&>(a_archive);
 			for (auto& dir : arch) {
@@ -1117,47 +1123,47 @@ namespace bsa
 			if (this != &a_rhs) {
 				_dirs = std::move(a_rhs._dirs);
 				_pos = std::move(a_rhs._pos);
+				a_rhs._pos = NPOS;
 			}
 			return *this;
 		}
 
-		[[nodiscard]] friend inline bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept
+		[[nodiscard]] friend constexpr bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept
 		{
-			if (!a_lhs._dirs && !a_rhs._dirs) {
-				return true;
-			} else {
-				return a_lhs._pos == a_rhs._pos;
-			}
+			return !a_lhs._dirs && !a_rhs._dirs;
 		}
 
-		[[nodiscard]] friend inline bool operator!=(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+		[[nodiscard]] friend constexpr bool operator!=(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
 
-		[[nodiscard]] inline reference operator*() { return *_pos; }
-		[[nodiscard]] inline pointer operator->() { return std::addressof(*_pos); }
+		[[nodiscard]] inline reference operator*() { return fetch(); }
+		[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
 
 		inline directory_iterator& operator++()
 		{
 			++_pos;
-			if (_pos == _dirs->end()) {
+			if (_pos >= _dirs->size()) {
 				_dirs.reset();
+				_pos = NPOS;
 			}
+			return *this;
 		}
 
-		[[nodiscard]] static inline directory_iterator begin(directory_iterator a_iter) noexcept
+		[[nodiscard]] friend inline directory_iterator begin(directory_iterator a_iter) noexcept
 		{
 			return a_iter;
 		}
 
-		[[nodiscard]] static inline directory_iterator end([[maybe_unused]] const directory_iterator&) noexcept
+		[[nodiscard]] friend inline directory_iterator end([[maybe_unused]] const directory_iterator&) noexcept
 		{
-			return directory_iterator();
+			return {};
 		}
 
 	private:
-		using container = std::vector<directory>;
-		using iterator = typename container::iterator;
+		inline reference fetch() { return _dirs.value()[_pos]; }
 
-		std::optional<container> _dirs;
-		iterator _pos;
+		static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
+
+		std::optional<std::vector<directory>> _dirs;
+		std::size_t _pos;
 	};
 }
