@@ -7,7 +7,7 @@
 
 int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 {
-#if 1
+#if 0
 	std::filesystem::path path(R"(E:\Games\SteamLibrary\steamapps\common\Skyrim Special Edition\Data)");
 	std::regex regex(".*.bsa", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::archive archive;
@@ -26,7 +26,8 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 		}
 	}
 #else
-	[[maybe_unused]] bsa::archive archive(R"(E:\Games\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim - Voices_en0.bsa)");
+	[[maybe_unused]] bsa::archive swap(R"(swappedtest.bsa)");
+	[[maybe_unused]] bsa::archive noswap(R"(test.bsa)");
 #endif
 
 	return EXIT_SUCCESS;

@@ -62,6 +62,14 @@ namespace bsa
 		class header_t;
 
 
+		template <class T>
+		inline void swap_endian(T& a_val)
+		{
+			auto iter = reinterpret_cast<char*>(std::addressof(a_val));
+			std::reverse(iter, iter + sizeof(T));
+		}
+
+
 		// Bethesda uses std::tolower to convert chars to lowercase, however
 		// they use the default C locale to convert the characters,
 		// so I've emulated this functionality, which enables a constexpr
@@ -173,26 +181,26 @@ namespace bsa
 			[[nodiscard]] constexpr archive_type types() const noexcept { return static_cast<archive_type>(_block.archiveTypes); }
 			[[nodiscard]] constexpr std::size_t version() const noexcept { return static_cast<std::size_t>(_block.version); }
 
-			[[nodiscard]] constexpr bool compressed() const noexcept { return (_block.flags & compressed_bit) != 0; }
-			[[nodiscard]] constexpr bool directory_strings() const noexcept { return (_block.flags & directory_strings_bit) != 0; }
-			[[nodiscard]] constexpr bool embedded_file_names() const noexcept { return (_block.flags & embedded_file_names_bit) != 0; }
-			[[nodiscard]] constexpr bool file_strings() const noexcept { return (_block.flags & file_strings_bit) != 0; }
-			[[nodiscard]] constexpr bool retain_directory_names() const noexcept { return (_block.flags & retain_directory_names_bit) != 0; }
-			[[nodiscard]] constexpr bool retain_file_names() const noexcept { return (_block.flags & retain_file_names_bit) != 0; }
-			[[nodiscard]] constexpr bool retain_file_name_offsets() const noexcept { return (_block.flags & retain_file_name_offsets_bit) != 0; }
-			[[nodiscard]] constexpr bool retain_strings_during_startup() const noexcept { return (_block.flags & retain_strings_during_startup_bit) != 0; }
-			[[nodiscard]] constexpr bool xbox_archive() const noexcept { return (_block.flags & xbox_archive_bit) != 0; }
-			[[nodiscard]] constexpr bool xbox_compressed() const noexcept { return (_block.flags & xbox_compressed_bit) != 0; }
+			[[nodiscard]] constexpr bool compressed() const noexcept { return (flags() & compressed_bit) != 0; }
+			[[nodiscard]] constexpr bool directory_strings() const noexcept { return (flags() & directory_strings_bit) != 0; }
+			[[nodiscard]] constexpr bool embedded_file_names() const noexcept { return (flags() & embedded_file_names_bit) != 0; }
+			[[nodiscard]] constexpr bool file_strings() const noexcept { return (flags() & file_strings_bit) != 0; }
+			[[nodiscard]] constexpr bool retain_directory_names() const noexcept { return (flags() & retain_directory_names_bit) != 0; }
+			[[nodiscard]] constexpr bool retain_file_names() const noexcept { return (flags() & retain_file_names_bit) != 0; }
+			[[nodiscard]] constexpr bool retain_file_name_offsets() const noexcept { return (flags() & retain_file_name_offsets_bit) != 0; }
+			[[nodiscard]] constexpr bool retain_strings_during_startup() const noexcept { return (flags() & retain_strings_during_startup_bit) != 0; }
+			[[nodiscard]] constexpr bool xbox_archive() const noexcept { return (flags() & xbox_archive_bit) != 0; }
+			[[nodiscard]] constexpr bool xbox_compressed() const noexcept { return (flags() & xbox_compressed_bit) != 0; }
 
-			[[nodiscard]] constexpr bool fonts() const noexcept { return (_block.archiveTypes & fontsbit) != 0; }
-			[[nodiscard]] constexpr bool meshes() const noexcept { return (_block.archiveTypes & meshesbit) != 0; }
-			[[nodiscard]] constexpr bool menus() const noexcept { return (_block.archiveTypes & menusbit) != 0; }
-			[[nodiscard]] constexpr bool misc() const noexcept { return (_block.archiveTypes & miscbit) != 0; }
-			[[nodiscard]] constexpr bool shaders() const noexcept { return (_block.archiveTypes & shadersbit) != 0; }
-			[[nodiscard]] constexpr bool sounds() const noexcept { return (_block.archiveTypes & soundsbit) != 0; }
-			[[nodiscard]] constexpr bool textures() const noexcept { return (_block.archiveTypes & texturesbit) != 0; }
-			[[nodiscard]] constexpr bool trees() const noexcept { return (_block.archiveTypes & treesbit) != 0; }
-			[[nodiscard]] constexpr bool voices() const noexcept { return (_block.archiveTypes & voicesbit) != 0; }
+			[[nodiscard]] constexpr bool fonts() const noexcept { return (types() & fontsbit) != 0; }
+			[[nodiscard]] constexpr bool meshes() const noexcept { return (types() & meshesbit) != 0; }
+			[[nodiscard]] constexpr bool menus() const noexcept { return (types() & menusbit) != 0; }
+			[[nodiscard]] constexpr bool misc() const noexcept { return (types() & miscbit) != 0; }
+			[[nodiscard]] constexpr bool shaders() const noexcept { return (types() & shadersbit) != 0; }
+			[[nodiscard]] constexpr bool sounds() const noexcept { return (types() & soundsbit) != 0; }
+			[[nodiscard]] constexpr bool textures() const noexcept { return (types() & texturesbit) != 0; }
+			[[nodiscard]] constexpr bool trees() const noexcept { return (types() & treesbit) != 0; }
+			[[nodiscard]] constexpr bool voices() const noexcept { return (types() & voicesbit) != 0; }
 
 			constexpr void clear() noexcept { _block = block_t(); }
 
@@ -358,13 +366,22 @@ namespace bsa
 
 			[[nodiscard]] constexpr std::uint64_t numeric() const noexcept { return _impl.numeric; }
 
-			inline bool read(istream_t& a_input)
+			inline bool read(istream_t& a_input, const header_t& a_header)
 			{
 				if (!a_input.read(reinterpret_cast<char*>(&_impl.block), sizeof(_impl.block))) {
 					return false;
 				}
 
+				if (a_header.xbox_archive()) {
+					byte_swap();
+				}
+
 				return true;
+			}
+
+			inline void byte_swap()
+			{
+				swap_endian(_impl.block.crc);
 			}
 
 		protected:
@@ -478,13 +495,13 @@ namespace bsa
 			[[nodiscard]] inline std::string str() const { return _name; }
 			[[nodiscard]] constexpr const std::string& str_ref() const noexcept { return _name; }
 
-			inline bool read(istream_t& a_input)
+			inline bool read(istream_t& a_input, const header_t& a_header)
 			{
-				if (!_hash.read(a_input)) {
+				if (!_hash.read(a_input, a_header)) {
 					return false;
 				}
 
-				if (!a_input.read(reinterpret_cast<char*>(&_block), sizeof(_block))) {
+				if (!_block.read(a_input, a_header)) {
 					return false;
 				}
 
@@ -536,6 +553,27 @@ namespace bsa
 						offset = std::move(a_rhs.offset);
 					}
 					return *this;
+				}
+
+				inline bool read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
+				{
+					if (!a_input.read(reinterpret_cast<char*>(this), sizeof(block_t))) {
+						return false;
+					}
+
+#if 0
+					if (a_header.xbox_archive()) {
+						byte_swap();
+					}
+#endif
+
+					return true;
+				}
+
+				inline void byte_swap()
+				{
+					swap_endian(size);
+					swap_endian(offset);
 				}
 
 				std::uint32_t size;
@@ -646,7 +684,7 @@ namespace bsa
 
 			inline bool read(istream_t& a_input, const header_t& a_header)
 			{
-				if (!_hash.read(a_input)) {
+				if (!_hash.read(a_input, a_header)) {
 					return false;
 				}
 
@@ -655,7 +693,7 @@ namespace bsa
 				case 104:
 					{
 						block103_t block;
-						if (!block.read(a_input)) {
+						if (!block.read(a_input, a_header)) {
 							return false;
 						}
 						_block.emplace<v103>(std::move(block));
@@ -664,7 +702,7 @@ namespace bsa
 				case 105:
 					{
 						block105_t block;
-						if (!block.read(a_input)) {
+						if (!block.read(a_input, a_header)) {
 							return false;
 						}
 						_block.emplace<v105>(std::move(block));
@@ -676,7 +714,9 @@ namespace bsa
 				}
 
 				if (a_header.directory_strings() || file_count() > 0) {
-					return read_extra(a_input, a_header);
+					if (!read_extra(a_input, a_header)) {
+						return false;
+					}
 				}
 
 				return true;
@@ -721,13 +761,25 @@ namespace bsa
 					return *this;
 				}
 
-				inline bool read(istream_t& a_input)
+				inline bool read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
 				{
 					if (!a_input.read(reinterpret_cast<char*>(this), sizeof(block103_t))) {
 						return false;
 					}
 
+#if 0
+					if (a_header.xbox_archive()) {
+						byte_swap();
+					}
+#endif
+
 					return true;
+				}
+
+				inline void byte_swap()
+				{
+					swap_endian(fileCount);
+					swap_endian(fileOffset);
 				}
 
 				std::uint32_t fileCount;
@@ -774,13 +826,25 @@ namespace bsa
 					return *this;
 				}
 
-				inline bool read(istream_t& a_input)
+				inline bool read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
 				{
 					if (!a_input.read(reinterpret_cast<char*>(this), sizeof(block105_t))) {
 						return false;
 					}
 
+#if 0
+					if (a_header.xbox_archive()) {
+						byte_swap();
+					}
+#endif
+
 					return true;
+				}
+
+				inline void byte_swap()
+				{
+					swap_endian(fileCount);
+					swap_endian(fileOffset);
 				}
 
 				std::uint32_t fileCount;
@@ -807,7 +871,7 @@ namespace bsa
 
 				for (std::size_t i = 0; i < file_count(); ++i) {
 					file_t file;
-					if (!file.read(a_input)) {
+					if (!file.read(a_input, a_header)) {
 						return false;
 					}
 					_files.push_back(std::move(file));
@@ -1267,11 +1331,6 @@ namespace bsa
 			_header.clear();
 
 			_header.read(a_input);
-
-			if (_header.xbox_archive()) {	// no support for xbox archives yet
-				assert(false);
-				return;
-			}
 
 			a_input.seekg(static_cast<std::streamoff>(_header.header_size()), std::ios_base::beg);
 			for (std::size_t i = 0; i < _header.directory_count(); ++i) {
