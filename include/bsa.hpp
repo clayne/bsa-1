@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -18,15 +19,9 @@
 #include <variant>
 #include <vector>
 
-#include <iostream>
-#include <map>
-
 
 namespace bsa
 {
-	using istream_t = std::istream;
-
-
 	using archive_flag = std::uint32_t;	// BSArchive::ARCHIVE_FLAGS
 	static constexpr archive_flag directory_strings_bit = 1 << 0;
 	static constexpr archive_flag file_strings_bit = 1 << 1;
@@ -50,6 +45,53 @@ namespace bsa
 	static constexpr archive_type treesbit = 1 << 6;
 	static constexpr archive_type fontsbit = 1 << 7;
 	static constexpr archive_type miscbit = 1 << 8;
+
+
+	class exception : public std::exception
+	{
+	public:
+		inline exception() noexcept : exception("base bsa exception") {}
+		inline exception(const exception&) noexcept = default;
+		inline exception(const char* a_what) noexcept : std::exception(), _what(a_what) {}
+		virtual ~exception() noexcept = default;
+
+		exception& operator=(const exception&) noexcept = default;
+
+		virtual const char* what() const noexcept override { return _what; }
+
+	private:
+		const char* _what;
+	};
+
+
+	class io_error : public exception
+	{
+	public:
+		inline io_error() noexcept : io_error("failure while performing i/o with bsa") {}
+		inline io_error(const io_error&) noexcept = default;
+		inline io_error(const char* a_what) noexcept : exception(a_what) {}
+		virtual ~io_error() noexcept = default;
+	};
+
+
+	class input_error : public io_error
+	{
+	public:
+		inline input_error() noexcept : input_error("failure while parsing bsa") {}
+		inline input_error(const input_error&) noexcept = default;
+		inline input_error(const char* a_what) noexcept : io_error(a_what) {}
+		virtual ~input_error() noexcept = default;
+	};
+
+
+	class version_error : public input_error
+	{
+	public:
+		inline version_error() noexcept : version_error("encountered unhandled version") {}
+		inline version_error(const version_error&) noexcept = default;
+		inline version_error(const char* a_what) noexcept : input_error(a_what) {}
+		virtual ~version_error() noexcept = default;
+	};
 
 
 	namespace detail
@@ -138,6 +180,54 @@ namespace bsa
 		}
 
 
+		class istream_t
+		{
+		public:
+			using stream_type = std::istream;
+			using reference = stream_type&;
+			using const_reference = const stream_type&;
+			using pointer = stream_type*;
+			using const_pointer = const stream_type*;
+			using char_type = typename stream_type::char_type;
+			using pos_type = typename stream_type::pos_type;
+			using off_type = typename stream_type::off_type;
+
+			inline istream_t() = delete;
+			inline istream_t(const istream_t&) = delete;
+			inline istream_t(istream_t&&) = delete;
+			inline istream_t(stream_type& a_stream) :
+				_stream(a_stream),
+				_beg(a_stream.tellg())
+			{
+				if (!_stream) {
+					throw input_error();
+				}
+			}
+
+			istream_t& operator=(const istream_t&) = delete;
+			istream_t& operator=(istream_t&&) = delete;
+
+			[[nodiscard]] constexpr reference operator*() noexcept { return _stream; }
+			[[nodiscard]] constexpr const_reference operator*() const noexcept { return _stream; }
+
+			[[nodiscard]] constexpr pointer operator->() noexcept { return std::addressof(_stream); }
+			[[nodiscard]] constexpr const_pointer operator->() const noexcept { return std::addressof(_stream); }
+
+			[[nodiscard]] bool operator!() const { return _stream.fail(); }
+			[[nodiscard]] explicit inline operator bool() const { return !_stream.fail(); }
+
+			inline istream_t& read(char_type* a_str, std::streamsize a_count) { if (!_stream.read(a_str, a_count)) throw input_error(); return *this; }
+
+			inline istream_t& seekg_abs(pos_type a_pos) { if (!_stream.seekg(a_pos)) throw input_error(); return *this; }
+			inline istream_t& seekg_beg() { if (!_stream.seekg(_beg)) throw input_error(); return *this; }
+			inline istream_t& seekg_rel(off_type a_off) { if (!_stream.seekg(a_off, std::ios_base::cur)) throw input_error(); return *this; }
+
+		private:
+			stream_type& _stream;
+			pos_type _beg;
+		};
+
+
 		class header_t
 		{
 		public:
@@ -204,13 +294,9 @@ namespace bsa
 
 			constexpr void clear() noexcept { _block = block_t(); }
 
-			inline bool read(istream_t& a_input)
+			inline void read(istream_t& a_input)
 			{
-				if (!a_input.read(reinterpret_cast<char*>(&_block), sizeof(_block))) {
-					return false;
-				}
-
-				return true;
+				_block.read(a_input);
 			}
 
 		private:
@@ -301,6 +387,11 @@ namespace bsa
 					return *this;
 				}
 
+				inline void read(istream_t& a_input)
+				{
+					a_input.read(reinterpret_cast<char*>(this), sizeof(block_t));
+				}
+
 				char tag[4];
 				std::uint32_t version;
 				std::uint32_t headerSize;
@@ -366,17 +457,13 @@ namespace bsa
 
 			[[nodiscard]] constexpr std::uint64_t numeric() const noexcept { return _impl.numeric; }
 
-			inline bool read(istream_t& a_input, const header_t& a_header)
+			inline void read(istream_t& a_input, const header_t& a_header)
 			{
-				if (!a_input.read(reinterpret_cast<char*>(&_impl.block), sizeof(_impl.block))) {
-					return false;
-				}
+				_impl.read(a_input);
 
 				if (a_header.xbox_archive()) {
 					byte_swap();
 				}
-
-				return true;
 			}
 
 			inline void byte_swap()
@@ -429,6 +516,11 @@ namespace bsa
 						numeric = std::move(a_rhs.numeric);
 					}
 					return *this;
+				}
+
+				inline void read(istream_t& a_input)
+				{
+					a_input.read(reinterpret_cast<char*>(this), sizeof(NumericBlock));
 				}
 
 				std::uint64_t numeric;
@@ -495,28 +587,24 @@ namespace bsa
 			[[nodiscard]] inline std::string str() const { return _name; }
 			[[nodiscard]] constexpr const std::string& str_ref() const noexcept { return _name; }
 
-			inline bool read(istream_t& a_input, const header_t& a_header)
+			inline void read(istream_t& a_input, const header_t& a_header)
 			{
-				if (!_hash.read(a_input, a_header)) {
-					return false;
-				}
-
-				if (!_block.read(a_input, a_header)) {
-					return false;
-				}
-
-				return true;
+				_hash.read(a_input, a_header);
+				_block.read(a_input, a_header);
 			}
 
-			inline bool read_name(istream_t& a_input)
+			inline void read_name(istream_t& a_input)
 			{
 				char ch;
 				do {
-					a_input.get(ch);
+					a_input->get(ch);
 					_name.push_back(ch);
 				} while (ch != '\0' && a_input);
 				_name.pop_back();
-				return !a_input.fail();
+
+				if (!a_input) {
+					throw input_error();
+				}
 			}
 
 		private:
@@ -555,19 +643,9 @@ namespace bsa
 					return *this;
 				}
 
-				inline bool read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
+				inline void read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
 				{
-					if (!a_input.read(reinterpret_cast<char*>(this), sizeof(block_t))) {
-						return false;
-					}
-
-#if 0
-					if (a_header.xbox_archive()) {
-						byte_swap();
-					}
-#endif
-
-					return true;
+					a_input.read(reinterpret_cast<char*>(this), sizeof(block_t));
 				}
 
 				inline void byte_swap()
@@ -636,8 +714,18 @@ namespace bsa
 				return *this;
 			}
 
-			[[nodiscard]] static constexpr std::size_t block_size_103() noexcept { return sizeof(block103_t) + hash_t::block_size(); }
-			[[nodiscard]] static constexpr std::size_t block_size_105() noexcept { return sizeof(block105_t) + hash_t::block_size(); }
+			[[nodiscard]] static constexpr std::size_t block_size(std::size_t a_version)
+			{
+				switch (a_version) {
+				case 103:
+				case 104:
+					return sizeof(block103_t) + hash_t::block_size();
+				case 105:
+					return sizeof(block105_t) + hash_t::block_size();
+				default:
+					throw version_error();
+				}
+			}
 
 			[[nodiscard]] inline const char* c_str() const noexcept { return _name.c_str(); }
 
@@ -682,44 +770,33 @@ namespace bsa
 			[[nodiscard]] inline const_iterator end() const noexcept { return _files.end(); }
 			[[nodiscard]] inline const_iterator cend() const noexcept { return _files.cend(); }
 
-			inline bool read(istream_t& a_input, const header_t& a_header)
+			inline void read(istream_t& a_input, const header_t& a_header)
 			{
-				if (!_hash.read(a_input, a_header)) {
-					return false;
-				}
+				_hash.read(a_input, a_header);
 
 				switch (a_header.version()) {
 				case 103:
 				case 104:
 					{
 						block103_t block;
-						if (!block.read(a_input, a_header)) {
-							return false;
-						}
+						block.read(a_input, a_header);
 						_block.emplace<v103>(std::move(block));
 					}
 					break;
 				case 105:
 					{
 						block105_t block;
-						if (!block.read(a_input, a_header)) {
-							return false;
-						}
+						block.read(a_input, a_header);
 						_block.emplace<v105>(std::move(block));
 					}
 					break;
 				default:
-					assert(false);
-					return false;
+					throw version_error();
 				}
 
 				if (a_header.directory_strings() || file_count() > 0) {
-					if (!read_extra(a_input, a_header)) {
-						return false;
-					}
+					read_extra(a_input, a_header);
 				}
-
-				return true;
 			}
 
 		private:
@@ -761,19 +838,9 @@ namespace bsa
 					return *this;
 				}
 
-				inline bool read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
+				inline void read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
 				{
-					if (!a_input.read(reinterpret_cast<char*>(this), sizeof(block103_t))) {
-						return false;
-					}
-
-#if 0
-					if (a_header.xbox_archive()) {
-						byte_swap();
-					}
-#endif
-
-					return true;
+					a_input.read(reinterpret_cast<char*>(this), sizeof(block103_t));
 				}
 
 				inline void byte_swap()
@@ -826,19 +893,9 @@ namespace bsa
 					return *this;
 				}
 
-				inline bool read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
+				inline void read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
 				{
-					if (!a_input.read(reinterpret_cast<char*>(this), sizeof(block105_t))) {
-						return false;
-					}
-
-#if 0
-					if (a_header.xbox_archive()) {
-						byte_swap();
-					}
-#endif
-
-					return true;
+					a_input->read(reinterpret_cast<char*>(this), sizeof(block105_t));
 				}
 
 				inline void byte_swap()
@@ -852,33 +909,27 @@ namespace bsa
 				std::uint64_t fileOffset;
 			};
 
-			inline bool read_extra(istream_t& a_input, const header_t& a_header)
+			inline void read_extra(istream_t& a_input, const header_t& a_header)
 			{
-				auto pos = a_input.tellg();
-				a_input.seekg(static_cast<std::streamoff>(file_offset() - a_header.file_names_length()), std::ios_base::beg);
+				auto pos = a_input->tellg();
+				a_input.seekg_beg();
+				a_input.seekg_rel(file_offset() - a_header.file_names_length());
 
 				if (a_header.directory_strings()) {
 					std::int8_t length;
-					if (!a_input.read(reinterpret_cast<char*>(&length), sizeof(length))) {
-						return false;
-					}
+					a_input.read(reinterpret_cast<char*>(&length), sizeof(length));
 
 					_name.resize(static_cast<std::size_t>(length) - 1);
-					if (!a_input.read(_name.data(), length)) {
-						return false;
-					}
+					a_input.read(_name.data(), length);
 				}
 
 				for (std::size_t i = 0; i < file_count(); ++i) {
 					file_t file;
-					if (!file.read(a_input, a_header)) {
-						return false;
-					}
+					file.read(a_input, a_header);
 					_files.push_back(std::move(file));
 				}
 
-				a_input.seekg(pos, std::ios_base::beg);
-				return true;
+				a_input.seekg_abs(pos);
 			}
 
 			hash_t _hash;
@@ -1267,6 +1318,13 @@ namespace bsa
 			read(a_path);
 		}
 
+		inline archive(std::filesystem::path&& a_path) :
+			_dirs(),
+			_header()
+		{
+			read(std::move(a_path));
+		}
+
 		inline archive& operator=(const archive& a_rhs)
 		{
 			if (this != &a_rhs) {
@@ -1324,57 +1382,49 @@ namespace bsa
 			}
 		}
 
-		inline void read(istream_t& a_input)
+		inline void read(std::filesystem::path&& a_path)
 		{
-			assert(a_input);
+			read(a_path);
+		}
+
+		inline void read(std::istream& a_input)
+		{
+			detail::istream_t input(a_input);
+
 			_dirs.clear();
 			_header.clear();
 
-			_header.read(a_input);
+			_header.read(input);
+			switch (_header.version()) {
+			case 103:
+			case 104:
+			case 105:
+				break;
+			default:
+				throw version_error();
+			}
 
-			a_input.seekg(static_cast<std::streamoff>(_header.header_size()), std::ios_base::beg);
+			input.seekg_beg();
+			input.seekg_rel(_header.header_size());
 			for (std::size_t i = 0; i < _header.directory_count(); ++i) {
 				detail::directory_t dir;
-				dir.read(a_input, _header);
+				dir.read(input, _header);
 				_dirs.push_back(std::move(dir));
 			}
 
 			auto offset = static_cast<std::streamoff>(_header.directory_names_length() + _header.directory_count());	// include prefixed length byte
 			offset += _header.file_count() * detail::file_t::block_size();
-			a_input.seekg(offset, std::ios_base::cur);
+			input.seekg_rel(offset);
 
 			if (_header.file_strings()) {
 				for (auto& dir : _dirs) {
 					for (auto& file : dir) {
-						file.read_name(a_input);
+						file.read_name(input);
 					}
 				}
 			}
 
 			assert(sanity_check());
-
-			[[maybe_unused]] bool dummy = true;
-		}
-
-		inline void dump()
-		{
-			directory_t root("data");
-
-			std::filesystem::path path;
-			directory_t* cur;
-			for (auto& dir : _dirs) {
-				path = dir.str();
-				cur = &root;
-				for (auto& entry : path) {
-					auto it = cur->subdirectories.insert(std::make_pair(entry, directory_t(entry)));
-					cur = &it.first->second;
-				}
-				for (auto& file : dir) {
-					cur->files.push_back(file.str());
-				}
-			}
-
-			root.dump("");
 		}
 
 	protected:
@@ -1393,34 +1443,6 @@ namespace bsa
 		[[nodiscard]] inline const_iterator cend() const noexcept { return _dirs.cend(); }
 
 	private:
-		struct directory_t
-		{
-			inline directory_t(std::filesystem::path a_name) :
-				name(std::move(a_name)),
-				subdirectories(),
-				files()
-			{}
-
-			inline void dump(std::string a_prefix)
-			{
-				std::cout << a_prefix << name << '\n';
-
-				for (auto& subdir : subdirectories) {
-					subdir.second.dump(a_prefix + "|\t");
-				}
-
-				std::sort(files.begin(), files.end(), std::less_equal<std::string>());
-
-				for (auto& file : files) {
-					std::cout << a_prefix << "|\t" << file << '\n';
-				}
-			}
-
-			std::filesystem::path name;
-			std::map<std::filesystem::path, directory_t> subdirectories;
-			std::vector<std::string> files;
-		};
-
 		inline bool sanity_check()
 		{
 			for (const auto& dir : _dirs) {

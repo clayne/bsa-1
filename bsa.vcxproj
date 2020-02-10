@@ -150,10 +150,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\main.cpp" />
+    <ClInclude Include="include\bsa.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\bsa.hpp" />
+    <ClCompile Include="testsuite\main.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

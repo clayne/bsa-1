@@ -7,7 +7,7 @@
 
 int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 {
-#if 0
+#if 1
 	std::filesystem::path path(R"(E:\Games\SteamLibrary\steamapps\common\Skyrim Special Edition\Data)");
 	std::regex regex(".*.bsa", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::archive archive;

@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="include">
+      <UniqueIdentifier>{284bcc3d-094f-46d3-b6d0-3a36c7f89fc0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="testsuite">
+      <UniqueIdentifier>{129b2543-35cc-495a-a0f1-5b68bc73c36a}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\bsa.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="testsuite\main.cpp">
+      <Filter>testsuite</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>
