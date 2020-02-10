@@ -537,6 +537,10 @@ namespace bsa
 		class directory_t
 		{
 		public:
+			using container_type = std::vector<file_t>;
+			using iterator = typename container_type::iterator;
+			using const_iterator = typename container_type::const_iterator;
+
 			inline directory_t() noexcept :
 				_hash(),
 				_block(),
@@ -594,21 +598,13 @@ namespace bsa
 			[[nodiscard]] inline std::string str() const { return _name; }
 			[[nodiscard]] constexpr const std::string& str_ref() const noexcept { return _name; }
 
-			template <class F, typename std::enable_if_t<std::is_invocable_r_v<void, std::decay_t<F>, file_t&>, int> = 0>
-			inline void for_each_file(F a_fn)
-			{
-				for (auto& file : _files) {
-					a_fn(file);
-				}
-			}
+			[[nodiscard]] inline iterator begin() noexcept { return _files.begin(); }
+			[[nodiscard]] inline const_iterator begin() const noexcept { return _files.begin(); }
+			[[nodiscard]] inline const_iterator cbegin() const noexcept { return _files.cbegin(); }
 
-			template <class F, typename std::enable_if_t<std::is_invocable_r_v<void, std::decay_t<F>, const file_t&>, int> = 0>
-			inline void for_each_file(F a_fn) const
-			{
-				for (auto& file : _files) {
-					a_fn(file);
-				}
-			}
+			[[nodiscard]] inline iterator end() noexcept { return _files.end(); }
+			[[nodiscard]] inline const_iterator end() const noexcept { return _files.end(); }
+			[[nodiscard]] inline const_iterator cend() const noexcept { return _files.cend(); }
 
 			inline bool read(istream_t& a_input, const header_t& a_header)
 			{
@@ -701,7 +697,7 @@ namespace bsa
 			hash_t _hash;
 			block_t _block;
 			std::string _name;
-			std::vector<file_t> _files;
+			container_type _files;
 		};
 
 
@@ -902,6 +898,7 @@ namespace bsa
 	class directory;
 	class directory_iterator;
 	class file;
+	class file_iterator;
 	class hash;
 
 
@@ -989,7 +986,7 @@ namespace bsa
 		[[nodiscard]] inline const std::string& string() const noexcept { return _impl.get().str_ref(); }
 
 	protected:
-		friend class directory_iterator;
+		friend class file_iterator;
 
 		explicit inline file(detail::file_t& a_rhs) noexcept :
 			_impl(std::ref(a_rhs))
@@ -1038,6 +1035,7 @@ namespace bsa
 
 	protected:
 		friend class directory_iterator;
+		friend class file_iterator;
 
 		explicit inline directory(detail::directory_t& a_rhs) noexcept :
 			_impl(std::ref(a_rhs))
@@ -1046,6 +1044,9 @@ namespace bsa
 		explicit inline directory(const detail::directory_ref& a_rhs) noexcept :
 			_impl(a_rhs)
 		{}
+
+		[[nodiscard]] inline detail::directory_t& directory_ref() noexcept { return _impl.get(); }
+		[[nodiscard]] inline const detail::directory_t& directory_ref() const noexcept { return _impl.get(); }
 
 	private:
 		detail::directory_ref _impl;
@@ -1084,10 +1085,9 @@ namespace bsa
 
 			if (_header.file_strings()) {
 				for (auto& dir : _dirs) {
-					dir.for_each_file([&](detail::file_t& a_file)
-					{
-						a_file.read_name(a_input);
-					});
+					for (auto& file : dir) {
+						file.read_name(a_input);
+					}
 				}
 			}
 
@@ -1109,10 +1109,9 @@ namespace bsa
 					auto it = cur->subdirectories.insert(std::make_pair(entry, directory_t(entry)));
 					cur = &it.first->second;
 				}
-				dir.for_each_file([&](detail::file_t& a_file)
-				{
-					cur->files.push_back(a_file.str());
-				});
+				for (auto& file : dir) {
+					cur->files.push_back(file.str());
+				}
 			}
 
 			root.dump("");
@@ -1165,18 +1164,17 @@ namespace bsa
 		inline bool sanity_check()
 		{
 			for (const auto& dir : _dirs) {
-				auto hash = detail::dir_hasher()(dir.str());
-				if (hash != dir.hash()) {
+				auto dHash = detail::dir_hasher()(dir.str());
+				if (dHash != dir.hash()) {
 					assert(false);
 				}
 
-				dir.for_each_file([&](const detail::file_t& a_file)
-				{
-					auto hash = detail::file_hasher()(a_file.c_str());
-					if (hash != a_file.hash()) {
+				for (const auto& file : dir) {
+					auto fHash = detail::file_hasher()(file.c_str());
+					if (fHash != file.hash()) {
 						assert(false);
 					}
-				});
+				}
 			}
 
 			return true;
@@ -1190,8 +1188,9 @@ namespace bsa
 	class directory_iterator
 	{
 	public:
-		using reference = directory&;
-		using pointer = directory*;
+		using value_type = directory;
+		using reference = value_type&;
+		using pointer = value_type*;
 
 		inline directory_iterator() noexcept :
 			_dirs(std::nullopt),
@@ -1216,7 +1215,7 @@ namespace bsa
 		{
 			auto& arch = const_cast<archive&>(a_archive);
 			for (auto& dir : arch) {
-				_dirs->push_back(directory(dir));
+				_dirs->push_back(value_type(dir));
 			}
 		}
 
@@ -1270,7 +1269,96 @@ namespace bsa
 
 		static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
 
-		std::optional<std::vector<directory>> _dirs;
+		std::optional<std::vector<value_type>> _dirs;
+		std::size_t _pos;
+	};
+
+
+	class file_iterator
+	{
+	public:
+		using value_type = file;
+		using reference = value_type&;
+		using pointer = value_type*;
+
+		inline file_iterator() noexcept :
+			_files(std::nullopt),
+			_pos(NPOS)
+		{}
+
+		inline file_iterator(const file_iterator& a_rhs) :
+			_files(a_rhs._files),
+			_pos(a_rhs._pos)
+		{}
+
+		inline file_iterator(file_iterator&& a_rhs) noexcept :
+			_files(std::move(a_rhs._files)),
+			_pos(std::move(a_rhs._pos))
+		{
+			a_rhs._pos = NPOS;
+		}
+
+		explicit inline file_iterator(const directory& a_directory) :
+			_files(std::in_place_t()),
+			_pos(0)
+		{
+			auto& dir = const_cast<directory&>(a_directory);
+			for (auto& file : dir.directory_ref()) {
+				_files->push_back(value_type(file));
+			}
+		}
+
+		inline file_iterator& operator=(const file_iterator& a_rhs)
+		{
+			if (this != &a_rhs) {
+				_files = a_rhs._files;
+				_pos = a_rhs._pos;
+			}
+			return *this;
+		}
+
+		inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
+		{
+			if (this != &a_rhs) {
+				_files = std::move(a_rhs._files);
+				_pos = std::move(a_rhs._pos);
+				a_rhs._pos = NPOS;
+			}
+			return *this;
+		}
+
+		[[nodiscard]] friend constexpr bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
+		[[nodiscard]] friend constexpr bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+
+		[[nodiscard]] inline reference operator*() { return fetch(); }
+		[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
+
+		inline file_iterator& operator++()
+		{
+			++_pos;
+			if (_pos >= _files->size()) {
+				_files.reset();
+				_pos = NPOS;
+			}
+			return *this;
+		}
+
+		[[nodiscard]] friend inline file_iterator begin(file_iterator a_iter) noexcept
+		{
+			return a_iter;
+		}
+
+		[[nodiscard]] friend inline file_iterator end([[maybe_unused]] const file_iterator&) noexcept
+		{
+			return {};
+		}
+
+	private:
+		inline reference fetch() { return _files.value()[_pos]; }
+
+		static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
+
+		std::optional<std::vector<file>> _files;
 		std::size_t _pos;
 	};
 }
