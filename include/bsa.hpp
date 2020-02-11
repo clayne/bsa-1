@@ -325,7 +325,7 @@ namespace bsa
 					directoryNamesLength(a_rhs.directoryNamesLength),
 					fileNamesLength(a_rhs.fileNamesLength),
 					archiveTypes(a_rhs.archiveTypes),
-					pad(a_rhs.pad)
+					pad(0)
 				{
 					for (std::size_t i = 0; i < sizeof(tag); ++i) {
 						tag[i] = a_rhs.tag[i];
@@ -342,7 +342,7 @@ namespace bsa
 					directoryNamesLength(std::move(a_rhs.directoryNamesLength)),
 					fileNamesLength(std::move(a_rhs.fileNamesLength)),
 					archiveTypes(std::move(a_rhs.archiveTypes)),
-					pad(std::move(a_rhs.pad))
+					pad(0)
 				{
 					for (std::size_t i = 0; i < sizeof(tag); ++i) {
 						tag[i] = std::move(a_rhs.tag[i]);
@@ -363,7 +363,6 @@ namespace bsa
 						directoryNamesLength = a_rhs.directoryNamesLength;
 						fileNamesLength = a_rhs.fileNamesLength;
 						archiveTypes = a_rhs.archiveTypes;
-						pad = a_rhs.pad;
 					}
 					return *this;
 				}
@@ -382,7 +381,6 @@ namespace bsa
 						directoryNamesLength = std::move(a_rhs.directoryNamesLength);
 						fileNamesLength = std::move(a_rhs.fileNamesLength);
 						archiveTypes = std::move(a_rhs.archiveTypes);
-						pad = std::move(a_rhs.pad);
 					}
 					return *this;
 				}
@@ -390,6 +388,7 @@ namespace bsa
 				inline void read(istream_t& a_input)
 				{
 					a_input.read(reinterpret_cast<char*>(this), sizeof(block_t));
+					pad = 0;
 				}
 
 				char tag[4];
@@ -865,13 +864,13 @@ namespace bsa
 
 				constexpr block105_t(const block105_t& a_rhs) noexcept :
 					fileCount(a_rhs.fileCount),
-					pad(a_rhs.pad),
+					pad(0),
 					fileOffset(a_rhs.fileOffset)
 				{}
 
 				constexpr block105_t(block105_t&& a_rhs) noexcept :
 					fileCount(std::move(a_rhs.fileCount)),
-					pad(std::move(a_rhs.pad)),
+					pad(0),
 					fileOffset(std::move(a_rhs.fileOffset))
 				{}
 
@@ -879,7 +878,6 @@ namespace bsa
 				{
 					if (this != &a_rhs) {
 						fileCount = a_rhs.fileCount;
-						pad = a_rhs.pad;
 						fileOffset = a_rhs.fileOffset;
 					}
 					return *this;
@@ -889,7 +887,6 @@ namespace bsa
 				{
 					if (this != &a_rhs) {
 						fileCount = std::move(a_rhs.fileCount);
-						pad = std::move(a_rhs.pad);
 						fileOffset = std::move(a_rhs.fileOffset);
 					}
 					return *this;
@@ -898,6 +895,7 @@ namespace bsa
 				inline void read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
 				{
 					a_input->read(reinterpret_cast<char*>(this), sizeof(block105_t));
+					pad = 0;
 				}
 
 				inline void byte_swap()
@@ -915,7 +913,7 @@ namespace bsa
 			{
 				auto pos = a_input->tellg();
 				a_input.seekg_beg();
-				a_input.seekg_rel(file_offset() - a_header.file_names_length());
+				a_input.seekg_rel(static_cast<std::streamoff>(file_offset() - a_header.file_names_length()));
 
 				if (a_header.directory_strings()) {
 					std::int8_t length;
@@ -1288,7 +1286,7 @@ namespace bsa
 
 		[[nodiscard]] inline detail::directory_t& directory_ref() noexcept { return *_impl; }
 		[[nodiscard]] inline const detail::directory_t& directory_ref() const noexcept { return *_impl; }
-		[[nodiscard]] inline bool has_value() const noexcept { return _impl.get(); }
+		[[nodiscard]] inline bool has_value() const noexcept { return static_cast<bool>(_impl); }
 
 	private:
 		value_type _impl;
@@ -1407,15 +1405,15 @@ namespace bsa
 			}
 
 			input.seekg_beg();
-			input.seekg_rel(_header.header_size());
+			input.seekg_rel(static_cast<std::streamoff>(_header.header_size()));
 			for (std::size_t i = 0; i < _header.directory_count(); ++i) {
 				auto dir = std::make_shared<detail::directory_t>();
 				dir->read(input, _header);
 				_dirs.push_back(std::move(dir));
 			}
 
-			auto offset = static_cast<std::streamoff>(_header.directory_names_length() + _header.directory_count());	// include prefixed length byte
-			offset += _header.file_count() * detail::file_t::block_size();
+			auto offset = static_cast<std::streamoff>(_header.directory_names_length()) + static_cast<std::streamoff>(_header.directory_count());	// include prefixed length byte
+			offset += static_cast<std::streamoff>(_header.file_count()) * detail::file_t::block_size();
 			input.seekg_rel(offset);
 
 			if (_header.file_strings()) {
