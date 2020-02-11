@@ -8,13 +8,13 @@
 
 int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 {
-#if 1
+#if 0
 	constexpr const char* PATHS[] = {
-		R"(E:\Games\SteamLibrary\steamapps\common\Skyrim Special Edition\Data)",
-		R"(D:\Games\SteamLibrary\steamapps\common\Skyrim\Data)",
-		R"(D:\Games\SteamLibrary\steamapps\common\Oblivion\Data)",
-		R"(D:\Games\SteamLibrary\steamapps\common\Fallout 3 goty\Data)",
-		R"(D:\Games\SteamLibrary\steamapps\common\Fallout New Vegas\Data)",
+		"E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim Special Edition\\Data",
+		"D:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim\\Data",
+		"D:\\Games\\SteamLibrary\\steamapps\\common\\Oblivion\\Data",
+		"D:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 3 goty\\Data",
+		"D:\\Games\\SteamLibrary\\steamapps\\common\\Fallout New Vegas\\Data",
 	};
 
 	std::filesystem::path path;
@@ -39,8 +39,7 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 		}
 	}
 #else
-	[[maybe_unused]] bsa::archive swap(R"(swappedtest.bsa)");
-	[[maybe_unused]] bsa::archive noswap(R"(test.bsa)");
+	[[maybe_unused]] ba2::archive archive("E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data\\ccBGSFO4006-PipBoy(Chrome) - Main.ba2");
 #endif
 
 	return EXIT_SUCCESS;
