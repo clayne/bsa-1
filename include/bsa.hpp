@@ -213,7 +213,7 @@ namespace bsa
 			[[nodiscard]] constexpr pointer operator->() noexcept { return std::addressof(_stream); }
 			[[nodiscard]] constexpr const_pointer operator->() const noexcept { return std::addressof(_stream); }
 
-			[[nodiscard]] bool operator!() const { return _stream.fail(); }
+			[[nodiscard]] inline bool operator!() const { return _stream.fail(); }
 			[[nodiscard]] explicit inline operator bool() const { return !_stream.fail(); }
 
 			inline istream_t& read(char_type* a_str, std::streamsize a_count) { if (!_stream.read(a_str, a_count)) throw input_error(); return *this; }
@@ -529,6 +529,7 @@ namespace bsa
 
 			NumericBlock _impl;
 		};
+		using hash_ref = std::reference_wrapper<hash_t>;
 
 
 		class file_t
@@ -662,12 +663,13 @@ namespace bsa
 			block_t _block;
 			std::string _name;
 		};
+		using file_ptr = std::shared_ptr<file_t>;
 
 
 		class directory_t
 		{
 		public:
-			using container_type = std::vector<file_t>;
+			using container_type = std::vector<file_ptr>;
 			using iterator = typename container_type::iterator;
 			using const_iterator = typename container_type::const_iterator;
 
@@ -924,8 +926,8 @@ namespace bsa
 				}
 
 				for (std::size_t i = 0; i < file_count(); ++i) {
-					file_t file;
-					file.read(a_input, a_header);
+					auto file = std::make_shared<file_t>();
+					file->read(a_input, a_header);
 					_files.push_back(std::move(file));
 				}
 
@@ -937,6 +939,7 @@ namespace bsa
 			std::string _name;
 			container_type _files;
 		};
+		using directory_ptr = std::shared_ptr<directory_t>;
 
 
 		class dir_hasher
@@ -967,9 +970,8 @@ namespace bsa
 					block.last2 = a_fullPath[a_fullPath.length() - 2];
 					[[fallthrough]];
 				case 2:
-					block.last = a_fullPath.back();
-					[[fallthrough]];
 				case 1:
+					block.last = a_fullPath.back();
 					block.first = a_fullPath.front();
 					[[fallthrough]];
 				default:
@@ -1126,11 +1128,6 @@ namespace bsa
 				return hash;
 			}
 		};
-
-
-		using hash_ref = std::reference_wrapper<hash_t>;
-		using file_ref = std::reference_wrapper<file_t>;
-		using directory_ref = std::reference_wrapper<directory_t>;
 	}
 
 
@@ -1220,24 +1217,26 @@ namespace bsa
 			return *this;
 		}
 
-		[[nodiscard]] inline const char* c_str() const noexcept { return _impl.get().c_str(); }
-		[[nodiscard]] inline hash hash_value() const noexcept { return _impl.get().hash_ref(); }
-		[[nodiscard]] inline std::size_t size() const noexcept { return _impl.get().size(); }
-		[[nodiscard]] inline const std::string& string() const noexcept { return _impl.get().str_ref(); }
+		[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
+		[[nodiscard]] inline hash hash_value() const noexcept { return _impl->hash_ref(); }
+		[[nodiscard]] inline std::size_t size() const noexcept { return _impl->size(); }
+		[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
 
 	protected:
 		friend class file_iterator;
 
-		explicit inline file(detail::file_t& a_rhs) noexcept :
-			_impl(std::ref(a_rhs))
-		{}
+		using value_type = detail::file_ptr;
 
-		explicit inline file(const detail::file_ref& a_rhs) noexcept :
+		explicit inline file(const value_type& a_rhs) noexcept :
 			_impl(a_rhs)
 		{}
 
+		explicit inline file(value_type&& a_rhs) noexcept :
+			_impl(std::move(a_rhs))
+		{}
+
 	private:
-		detail::file_ref _impl;
+		value_type _impl;
 	};
 
 
@@ -1268,28 +1267,31 @@ namespace bsa
 			return *this;
 		}
 
-		[[nodiscard]] inline const char* c_str() const noexcept { return _impl.get().c_str(); }
-		[[nodiscard]] inline std::size_t file_count() const noexcept { return _impl.get().file_count(); }
-		[[nodiscard]] inline hash hash_value() const noexcept { return _impl.get().hash_ref(); }
-		[[nodiscard]] inline const std::string& string() const noexcept { return _impl.get().str_ref(); }
+		[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
+		[[nodiscard]] inline std::size_t file_count() const noexcept { return _impl->file_count(); }
+		[[nodiscard]] inline hash hash_value() const noexcept { return _impl->hash_ref(); }
+		[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
 
 	protected:
 		friend class directory_iterator;
 		friend class file_iterator;
 
-		explicit inline directory(detail::directory_t& a_rhs) noexcept :
-			_impl(std::ref(a_rhs))
-		{}
+		using value_type = detail::directory_ptr;
 
-		explicit inline directory(const detail::directory_ref& a_rhs) noexcept :
+		explicit inline directory(const value_type& a_rhs) noexcept :
 			_impl(a_rhs)
 		{}
 
-		[[nodiscard]] inline detail::directory_t& directory_ref() noexcept { return _impl.get(); }
-		[[nodiscard]] inline const detail::directory_t& directory_ref() const noexcept { return _impl.get(); }
+		explicit inline directory(value_type&& a_rhs) noexcept :
+			_impl(std::move(a_rhs))
+		{}
+
+		[[nodiscard]] inline detail::directory_t& directory_ref() noexcept { return *_impl; }
+		[[nodiscard]] inline const detail::directory_t& directory_ref() const noexcept { return *_impl; }
+		[[nodiscard]] inline bool has_value() const noexcept { return _impl.get(); }
 
 	private:
-		detail::directory_ref _impl;
+		value_type _impl;
 	};
 
 
@@ -1407,8 +1409,8 @@ namespace bsa
 			input.seekg_beg();
 			input.seekg_rel(_header.header_size());
 			for (std::size_t i = 0; i < _header.directory_count(); ++i) {
-				detail::directory_t dir;
-				dir.read(input, _header);
+				auto dir = std::make_shared<detail::directory_t>();
+				dir->read(input, _header);
 				_dirs.push_back(std::move(dir));
 			}
 
@@ -1418,8 +1420,8 @@ namespace bsa
 
 			if (_header.file_strings()) {
 				for (auto& dir : _dirs) {
-					for (auto& file : dir) {
-						file.read_name(input);
+					for (auto& file : *dir) {
+						file->read_name(input);
 					}
 				}
 			}
@@ -1430,7 +1432,7 @@ namespace bsa
 	protected:
 		friend class directory_iterator;
 
-		using container_type = std::vector<detail::directory_t>;
+		using container_type = std::vector<detail::directory_ptr>;
 		using iterator = typename container_type::iterator;
 		using const_iterator = typename container_type::const_iterator;
 
@@ -1446,14 +1448,14 @@ namespace bsa
 		inline bool sanity_check()
 		{
 			for (const auto& dir : _dirs) {
-				auto dHash = detail::dir_hasher()(dir.str_ref());
-				if (dHash != dir.hash()) {
+				auto dHash = detail::dir_hasher()(dir->str_ref());
+				if (dHash != dir->hash()) {
 					assert(false);
 				}
 
-				for (const auto& file : dir) {
-					auto fHash = detail::file_hasher()(file.str_ref());
-					if (fHash != file.hash()) {
+				for (const auto& file : *dir) {
+					auto fHash = detail::file_hasher()(file->str_ref());
+					if (fHash != file->hash()) {
 						assert(false);
 					}
 				}
@@ -1585,8 +1587,10 @@ namespace bsa
 			_pos(0)
 		{
 			auto& dir = const_cast<directory&>(a_directory);
-			for (auto& file : dir.directory_ref()) {
-				_files->push_back(value_type(file));
+			if (dir.has_value()) {
+				for (auto& file : dir.directory_ref()) {
+					_files->push_back(value_type(file));
+				}
 			}
 		}
 
@@ -1625,15 +1629,8 @@ namespace bsa
 			return *this;
 		}
 
-		[[nodiscard]] friend inline file_iterator begin(file_iterator a_iter) noexcept
-		{
-			return a_iter;
-		}
-
-		[[nodiscard]] friend inline file_iterator end([[maybe_unused]] const file_iterator&) noexcept
-		{
-			return {};
-		}
+		[[nodiscard]] friend inline file_iterator begin(file_iterator a_iter) noexcept { return a_iter; }
+		[[nodiscard]] friend inline file_iterator end([[maybe_unused]] const file_iterator&) noexcept { return {}; }
 
 	private:
 		inline reference fetch() { return _files.value()[_pos]; }
