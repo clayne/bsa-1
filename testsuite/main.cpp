@@ -20,6 +20,7 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 	std::filesystem::path path;
 	std::regex regex(".*.bsa", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::archive archive;
+	std::ios_base::sync_with_stdio(false);
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
@@ -39,7 +40,27 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 		}
 	}
 #else
-	[[maybe_unused]] ba2::archive archive("E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data\\ccBGSFO4006-PipBoy(Chrome) - Main.ba2");
+	constexpr const char* PATHS[] = {
+		"E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data"
+	};
+
+	std::filesystem::path path;
+	std::regex regex(".*.ba2", std::regex_constants::grep | std::regex_constants::icase);
+	ba2::archive archive;
+	std::ios_base::sync_with_stdio(false);
+
+	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
+		path = PATHS[i];
+
+		for (auto& sysEntry : std::filesystem::directory_iterator(path)) {
+			if (!std::regex_match(sysEntry.path().string(), regex)) {
+				continue;
+			}
+
+			archive.read(sysEntry.path());
+			[[maybe_unused]] bool dummy = true;
+		}
+	}
 #endif
 
 	return EXIT_SUCCESS;
