@@ -205,10 +205,12 @@ namespace bsa
 			[[nodiscard]] constexpr pointer operator->() noexcept { return std::addressof(_stream); }
 			[[nodiscard]] constexpr const_pointer operator->() const noexcept { return std::addressof(_stream); }
 
-			[[nodiscard]] inline bool operator!() const { return _stream.fail(); }
-			[[nodiscard]] explicit inline operator bool() const { return !_stream.fail(); }
+			[[nodiscard]] inline bool operator!() const { return !_stream; }
+			[[nodiscard]] explicit inline operator bool() const { return static_cast<bool>(_stream); }
 
 			inline istream_t& read(char_type* a_str, std::streamsize a_count) { if (!_stream.read(a_str, a_count)) throw input_error(); return *this; }
+
+			[[nodiscard]] inline pos_type tellg() { return _stream.tellg(); }
 
 			inline istream_t& seekg_abs(pos_type a_pos) { if (!_stream.seekg(a_pos)) throw input_error(); return *this; }
 			inline istream_t& seekg_beg() { if (!_stream.seekg(_beg)) throw input_error(); return *this; }
@@ -923,7 +925,7 @@ namespace bsa
 				a_input.seekg_rel(static_cast<std::streamoff>(file_offset() - a_header.file_names_length()));
 
 				if (a_header.directory_strings()) {
-					std::int8_t length;
+					std::uint8_t length;
 					a_input.read(reinterpret_cast<char*>(&length), sizeof(length));
 
 					_name.resize(static_cast<std::size_t>(length) - 1);
@@ -1705,6 +1707,7 @@ namespace ba2
 
 			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t>(_block.fileCount); }
 			[[nodiscard]] constexpr std::string_view format() const { return std::string_view(_block.contentsFormat, std::extent_v<decltype(_block.contentsFormat)>); }
+			[[nodiscard]] constexpr bool has_string_table() const noexcept { return string_table_offset() != 0; }
 			[[nodiscard]] constexpr std::string_view magic() const { return std::string_view(_block.magic, std::extent_v<decltype(_block.magic)>); }
 			[[nodiscard]] constexpr std::uint64_t string_table_offset() const noexcept { return _block.stringTableOffset; }
 			[[nodiscard]] constexpr std::size_t version() const noexcept { return static_cast<std::size_t>(_block.version); }
@@ -1978,6 +1981,14 @@ namespace ba2
 				}
 			}
 
+			inline void read_name(istream_t& a_input)
+			{
+				std::uint16_t length;
+				a_input.read(reinterpret_cast<char*>(&length), sizeof(length));
+				_name.resize(length);
+				a_input.read(_name.data(), _name.length());
+			}
+
 		private:
 			struct header_t	// BSResource::Archive2::Index::EntryHeader
 			{
@@ -2090,6 +2101,7 @@ namespace ba2
 			hash_t _hash;
 			header_t _header;
 			std::vector<chunk_t> _chunks;
+			std::string _name;
 		};
 
 
@@ -2146,6 +2158,14 @@ namespace ba2
 						chunk.read(a_input);
 					}
 				}
+			}
+
+			inline void read_name(istream_t& a_input)
+			{
+				std::uint16_t length;
+				a_input.read(reinterpret_cast<char*>(&length), sizeof(length));
+				_name.resize(length);
+				a_input.read(_name.data(), _name.length());
 			}
 
 		private:
@@ -2309,6 +2329,7 @@ namespace ba2
 			hash_t _hash;
 			header_t _header;
 			std::vector<chunk_t> _chunks;
+			std::string _name;
 		};
 	}
 
@@ -2420,12 +2441,34 @@ namespace ba2
 				throw input_error();
 			}
 
+			if (_header.has_string_table()) {
+				input.seekg_beg();
+				input.seekg_abs(_header.string_table_offset() + input.tellg());
+
+				switch (_files.index()) {
+				case igeneral:
+					for (auto& file : std::get<igeneral>(_files)) {
+						file.read_name(input);
+					}
+					break;
+				case itexture:
+					for (auto& file : std::get<itexture>(_files)) {
+						file.read_name(input);
+					}
+					break;
+				default:
+					throw std::bad_variant_access();
+				}
+			}
+
 			[[maybe_unused]] bool dummy = true;
 		}
 
 	private:
 		using cgeneral = std::vector<detail::general_t>;
 		using ctexture = std::vector<detail::texture_t>;
+
+		enum { igeneral, itexture };
 
 		std::variant<cgeneral, ctexture> _files;
 		detail::header_t _header;
