@@ -212,9 +212,10 @@ namespace bsa
 
 			[[nodiscard]] inline pos_type tellg() { return _stream.tellg(); }
 
-			inline istream_t& seekg_abs(pos_type a_pos) { if (!_stream.seekg(a_pos)) throw input_error(); return *this; }
-			inline istream_t& seekg_beg() { if (!_stream.seekg(_beg)) throw input_error(); return *this; }
-			inline istream_t& seekg_rel(off_type a_off) { if (!_stream.seekg(a_off, std::ios_base::cur)) throw input_error(); return *this; }
+			inline istream_t& seekg_abs(pos_type a_pos) { if (!_stream.seekg(a_pos)) throw input_error(); return *this; }	// seek absolute position
+			inline istream_t& seekg_beg() { if (!_stream.seekg(_beg)) throw input_error(); return *this; }	// seek to beginning
+			inline istream_t& seekg_beg(pos_type a_pos) { if (!_stream.seekg(_beg + a_pos)) throw input_error(); return *this; }	// seek from beginning
+			inline istream_t& seekg_rel(off_type a_off) { if (!_stream.seekg(a_off, std::ios_base::cur)) throw input_error(); return *this; }	// seek relative to current position
 
 		private:
 			stream_type& _stream;
@@ -903,7 +904,7 @@ namespace bsa
 
 				inline void read(istream_t& a_input, [[maybe_unused]] const header_t& a_header)
 				{
-					a_input->read(reinterpret_cast<char*>(this), sizeof(block105_t));
+					a_input.read(reinterpret_cast<char*>(this), sizeof(block105_t));
 					pad = 0;
 				}
 
@@ -920,9 +921,8 @@ namespace bsa
 
 			inline void read_extra(istream_t& a_input, const header_t& a_header)
 			{
-				auto pos = a_input->tellg();
-				a_input.seekg_beg();
-				a_input.seekg_rel(static_cast<std::streamoff>(file_offset() - a_header.file_names_length()));
+				auto pos = a_input.tellg();
+				a_input.seekg_beg(file_offset() - a_header.file_names_length());
 
 				if (a_header.directory_strings()) {
 					std::uint8_t length;
@@ -1421,8 +1421,7 @@ namespace bsa
 				throw version_error();
 			}
 
-			input.seekg_beg();
-			input.seekg_rel(static_cast<std::streamoff>(_header.header_size()));
+			input.seekg_beg(_header.header_size());
 			for (std::size_t i = 0; i < _header.directory_count(); ++i) {
 				auto dir = std::make_shared<detail::directory_t>();
 				dir->read(input, _header);
@@ -2442,8 +2441,7 @@ namespace ba2
 			}
 
 			if (_header.has_string_table()) {
-				input.seekg_beg();
-				input.seekg_abs(_header.string_table_offset() + input.tellg());
+				input.seekg_beg(_header.string_table_offset());
 
 				switch (_files.index()) {
 				case igeneral:
