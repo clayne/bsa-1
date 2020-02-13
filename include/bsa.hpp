@@ -70,6 +70,21 @@ namespace bsa
 	};
 
 
+	// non-ascii characters have negative values, and beth doesn't cast them to their unsigned
+	// counterparts while remapping them, so you get something like "remaptable[-17]" which
+	// is possibly the most bethesda thing they could do
+	class hash_error : public exception
+	{
+	public:
+		inline hash_error() noexcept : hash_error("encountered a non ascii character during hash generation") {}
+		inline hash_error(const hash_error&) noexcept = default;
+		inline hash_error(const char* a_what) noexcept : exception(a_what) {}
+		virtual ~hash_error() noexcept = default;
+
+		hash_error& operator=(const hash_error&) noexcept = default;
+	};
+
+
 	class io_error : public exception
 	{
 	public:
@@ -957,11 +972,21 @@ namespace bsa
 
 			[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
 			{
+				verify_path(a_path);
 				auto fullPath = normalize(std::move(a_path));
 				return hash(fullPath);
 			}
 
 		protected:
+			inline constexpr void verify_path(const std::string_view& a_path) const
+			{
+				for (auto& ch : a_path) {
+					if (ch < 0) {
+						throw hash_error();
+					}
+				}
+			}
+
 			[[nodiscard]] inline hash_t hash(const std::string& a_fullPath) const noexcept
 			{
 				constexpr auto LEN_MAX = static_cast<std::size_t>(std::numeric_limits<std::int8_t>::max());
@@ -1033,6 +1058,7 @@ namespace bsa
 
 			[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
 			{
+				verify_path(a_path);
 				auto [stem, extension] = normalize(std::move(a_path));
 				return hash(stem, extension);
 			}
@@ -1652,24 +1678,10 @@ namespace bsa
 namespace ba2
 {
 	using exception = bsa::exception;
+	using hash_error = bsa::hash_error;
 	using io_error = bsa::io_error;
 	using input_error = bsa::input_error;
 	using version_error = bsa::version_error;
-
-
-	// non-ascii characters have negative values, and beth doesn't cast them to their unsigned
-	// counterparts while remapping them, so you get something like "remaptable[-17]" which
-	// is possibly the most bethesda thing they could do
-	class hash_error : public exception
-	{
-	public:
-		inline hash_error() noexcept : hash_error("encountered a non ascii character during hash generation") {}
-		inline hash_error(const hash_error&) noexcept = default;
-		inline hash_error(const char* a_what) noexcept : exception(a_what) {}
-		virtual ~hash_error() noexcept = default;
-
-		hash_error& operator=(const hash_error&) noexcept = default;
-	};
 
 
 	using archive_version = std::size_t;
@@ -2038,7 +2050,7 @@ namespace ba2
 				std::uint16_t length;
 				a_input.read(reinterpret_cast<char*>(&length), sizeof(length));
 				_name.resize(length);
-				a_input.read(_name.data(), _name.length());
+				a_input.read(_name.data(), static_cast<std::streamsize>(_name.length()));
 			}
 
 		private:
@@ -2243,7 +2255,7 @@ namespace ba2
 				std::uint16_t length;
 				a_input.read(reinterpret_cast<char*>(&length), sizeof(length));
 				_name.resize(length);
-				a_input.read(_name.data(), _name.length());
+				a_input.read(_name.data(), static_cast<std::streamsize>(_name.length()));
 			}
 
 		private:
