@@ -791,18 +791,12 @@ namespace bsa
 				switch (a_header.version()) {
 				case v103:
 				case v104:
-					{
-						block86_t block;
-						block.read(a_input, a_header);
-						_block.emplace<oblivion>(std::move(block));
-					}
+					_block.emplace<oblivion>();
+					std::get<oblivion>(_block).read(a_input, a_header);
 					break;
 				case v105:
-					{
-						block64_t block;
-						block.read(a_input, a_header);
-						_block.emplace<sse>(std::move(block));
-					}
+					_block.emplace<sse>();
+					std::get<sse>(_block).read(a_input, a_header);
 					break;
 				default:
 					throw version_error();
@@ -1150,6 +1144,8 @@ namespace bsa
 	class hash
 	{
 	public:
+		hash() = delete;
+
 		inline hash(const hash& a_rhs) noexcept :
 			_impl(a_rhs._impl)
 		{}
@@ -1185,11 +1181,11 @@ namespace bsa
 		friend class directory;
 		friend class file;
 
-		inline hash(detail::hash_t& a_rhs) noexcept :
+		explicit inline hash(detail::hash_t& a_rhs) noexcept :
 			_impl(std::ref(a_rhs))
 		{}
 
-		inline hash(const detail::hash_ref& a_rhs) noexcept :
+		explicit inline hash(const detail::hash_ref& a_rhs) noexcept :
 			_impl(a_rhs)
 		{}
 
@@ -1201,6 +1197,8 @@ namespace bsa
 	class file
 	{
 	public:
+		file() = delete;
+
 		inline file(const file& a_rhs) noexcept :
 			_impl(a_rhs._impl)
 		{}
@@ -1226,7 +1224,7 @@ namespace bsa
 		}
 
 		[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
-		[[nodiscard]] inline hash hash_value() const noexcept { return _impl->hash_ref(); }
+		[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
 		[[nodiscard]] inline std::size_t size() const noexcept { return _impl->size(); }
 		[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
 
@@ -1251,6 +1249,8 @@ namespace bsa
 	class directory
 	{
 	public:
+		directory() = delete;
+
 		inline directory(const directory& a_rhs) noexcept :
 			_impl(a_rhs._impl)
 		{}
@@ -1277,7 +1277,7 @@ namespace bsa
 
 		[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
 		[[nodiscard]] inline std::size_t file_count() const noexcept { return _impl->file_count(); }
-		[[nodiscard]] inline hash hash_value() const noexcept { return _impl->hash_ref(); }
+		[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
 		[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
 
 	protected:
@@ -1489,7 +1489,7 @@ namespace bsa
 		using reference = value_type&;
 		using pointer = value_type*;
 
-		inline directory_iterator() noexcept :
+		constexpr directory_iterator() noexcept :
 			_dirs(std::nullopt),
 			_pos(NPOS)
 		{}
@@ -1919,6 +1919,7 @@ namespace ba2
 
 			block_t _block;
 		};
+		using hash_ref = std::reference_wrapper<hash_t>;
 
 
 		class general_t
@@ -2110,6 +2111,7 @@ namespace ba2
 			std::vector<chunk_t> _chunks;
 			std::string _name;
 		};
+		using general_ptr = std::shared_ptr<general_t>;
 
 
 		class texture_t
@@ -2363,7 +2365,264 @@ namespace ba2
 			std::vector<chunk_t> _chunks;
 			std::string _name;
 		};
+		using texture_ptr = std::shared_ptr<texture_t>;
 	}
+
+
+	class directory;
+	class file_entry;
+	class file_iterator;
+	class general_file;
+	class hash;
+	class texture_file;
+
+
+	class hash
+	{
+	public:
+		inline hash(const hash& a_rhs) noexcept :
+			_impl(a_rhs._impl)
+		{}
+
+		inline hash(hash&& a_rhs) noexcept :
+			_impl(std::move(a_rhs._impl))
+		{}
+
+		inline hash& operator=(const hash& a_rhs) noexcept
+		{
+			if (this != std::addressof(a_rhs)) {
+				_impl = a_rhs._impl;
+			}
+			return *this;
+		}
+
+		inline hash& operator=(hash&& a_rhs) noexcept
+		{
+			if (this != std::addressof(a_rhs)) {
+				_impl = std::move(a_rhs._impl);
+			}
+			return *this;
+		}
+
+		[[nodiscard]] inline std::uint32_t directory_hash() const noexcept { return _impl.get().directory_hash(); }
+		[[nodiscard]] inline std::string_view extension() const { return _impl.get().extension(); }
+		[[nodiscard]] inline std::uint32_t file_hash() const noexcept { return _impl.get().file_hash(); }
+
+	protected:
+		friend class general_file;
+		friend class texture_file;
+
+		inline hash(detail::hash_t& a_rhs) noexcept :
+			_impl(std::ref(a_rhs))
+		{}
+
+		inline hash(const detail::hash_ref& a_rhs) noexcept :
+			_impl(a_rhs)
+		{}
+
+	private:
+		detail::hash_ref _impl;
+	};
+
+
+	class general_file
+	{
+	public:
+		general_file() = delete;
+
+		inline general_file(const general_file& a_rhs) noexcept :
+			_impl(a_rhs._impl)
+		{}
+
+		inline general_file(general_file&& a_rhs) noexcept :
+			_impl(std::move(a_rhs._impl))
+		{}
+
+		inline general_file& operator=(const general_file& a_rhs) noexcept
+		{
+			if (this != std::addressof(a_rhs)) {
+				_impl = a_rhs._impl;
+			}
+			return *this;
+		}
+
+		inline general_file& operator=(general_file&& a_rhs) noexcept
+		{
+			if (this != std::addressof(a_rhs)) {
+				_impl = std::move(a_rhs._impl);
+			}
+			return *this;
+		}
+
+		[[nodiscard]] inline std::ptrdiff_t chunk_count() const noexcept { return _impl->chunk_count(); }
+		[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
+		[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
+		[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
+
+	protected:
+		friend class file_iterator;
+
+		using value_type = detail::general_ptr;
+
+		explicit inline general_file(const value_type& a_rhs) noexcept :
+			_impl(a_rhs)
+		{}
+
+		explicit inline general_file(value_type&& a_rhs) noexcept :
+			_impl(std::move(a_rhs))
+		{}
+
+	private:
+		value_type _impl;
+	};
+
+
+	class texture_file
+	{
+	public:
+		texture_file() = delete;
+
+		inline texture_file(const texture_file& a_rhs) noexcept :
+			_impl(a_rhs._impl)
+		{}
+
+		inline texture_file(texture_file&& a_rhs) noexcept :
+			_impl(std::move(a_rhs._impl))
+		{}
+
+		inline texture_file& operator=(const texture_file& a_rhs) noexcept
+		{
+			if (this != std::addressof(a_rhs)) {
+				_impl = a_rhs._impl;
+			}
+			return *this;
+		}
+
+		inline texture_file& operator=(texture_file&& a_rhs) noexcept
+		{
+			if (this != std::addressof(a_rhs)) {
+				_impl = std::move(a_rhs._impl);
+			}
+			return *this;
+		}
+
+		[[nodiscard]] inline std::ptrdiff_t chunk_count() const noexcept { return _impl->chunk_count(); }
+		[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
+		[[nodiscard]] inline std::ptrdiff_t flags() const noexcept { return _impl->flags(); }
+		[[nodiscard]] inline std::ptrdiff_t format() const noexcept { return _impl->format(); }
+		[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
+		[[nodiscard]] inline std::size_t height() const noexcept { return _impl->height(); }
+		[[nodiscard]] inline std::ptrdiff_t mip_count() const noexcept { return _impl->mip_count(); }
+		[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
+		[[nodiscard]] inline std::ptrdiff_t tile_mode() const noexcept { return _impl->tile_mode(); }
+		[[nodiscard]] inline std::size_t width() const noexcept { return _impl->width(); }
+
+	protected:
+		friend class file_iterator;
+
+		using value_type = detail::texture_ptr;
+
+		explicit inline texture_file(const value_type& a_rhs) noexcept :
+			_impl(a_rhs)
+		{}
+
+		explicit inline texture_file(value_type&& a_rhs) noexcept :
+			_impl(std::move(a_rhs))
+		{}
+
+	private:
+		value_type _impl;
+	};
+
+
+	class file_entry
+	{
+	private:
+		using general_file_t = general_file;
+		using texture_file_t = texture_file;
+
+	public:
+		constexpr file_entry() noexcept :
+			_impl()
+		{}
+
+		inline file_entry(const file_entry& a_rhs) :
+			_impl(a_rhs._impl)
+		{}
+
+		inline file_entry(file_entry&& a_rhs) noexcept :
+			_impl(std::move(a_rhs._impl))
+		{}
+
+		explicit inline file_entry(const general_file& a_rhs) :
+			_impl(a_rhs)
+		{}
+
+		explicit inline file_entry(general_file&& a_rhs) noexcept :
+			_impl(std::move(a_rhs))
+		{}
+
+		explicit inline file_entry(const texture_file& a_rhs) :
+			_impl(a_rhs)
+		{}
+
+		explicit inline file_entry(texture_file&& a_rhs) noexcept :
+			_impl(std::move(a_rhs))
+		{}
+
+		inline file_entry& operator=(const file_entry& a_rhs)
+		{
+			if (this != std::addressof(a_rhs)) {
+				_impl = a_rhs._impl;
+			}
+			return *this;
+		}
+
+		inline file_entry& operator=(file_entry&& a_rhs) noexcept
+		{
+			if (this != std::addressof(a_rhs)) {
+				_impl = std::move(a_rhs._impl);
+			}
+			return *this;
+		}
+
+		[[nodiscard]] constexpr bool is_general_file() const noexcept { return _impl.index() == igeneral; }
+		[[nodiscard]] constexpr bool is_texture_file() const noexcept { return _impl.index() == itexture; }
+
+		[[nodiscard]] constexpr const general_file& general_file() const { return std::get<igeneral>(_impl); }
+		[[nodiscard]] constexpr const texture_file& texture_file() const { return std::get<itexture>(_impl); }
+
+		[[nodiscard]] const char* c_str() const noexcept
+		{
+			switch (_impl.index()) {
+			case igeneral:
+				return std::get<igeneral>(_impl).c_str();
+			case itexture:
+				return std::get<itexture>(_impl).c_str();
+			default:
+				return "";
+			}
+		}
+
+		[[nodiscard]] const std::string& string() const noexcept
+		{
+			static std::string defaultStr;
+
+			switch (_impl.index()) {
+			case igeneral:
+				return std::get<igeneral>(_impl).string();
+			case itexture:
+				return std::get<itexture>(_impl).string();
+			default:
+				return defaultStr;
+			}
+		}
+
+	private:
+		enum : std::size_t { imono, igeneral, itexture };
+
+		std::variant<std::monostate, general_file_t, texture_file_t> _impl;
+	};
 
 
 	class archive
@@ -2472,12 +2731,14 @@ namespace ba2
 			if (_header.general()) {
 				_files.emplace<cgeneral>(_header.file_count());
 				for (auto& file : std::get<cgeneral>(_files)) {
-					file.read(input);
+					file = std::make_shared<detail::general_t>();
+					file->read(input);
 				}
 			} else if (_header.directx()) {
 				_files.emplace<ctexture>(_header.file_count());
 				for (auto& file : std::get<ctexture>(_files)) {
-					file.read(input);
+					file = std::make_shared<detail::texture_t>();
+					file->read(input);
 				}
 			} else {
 				throw input_error();
@@ -2489,12 +2750,12 @@ namespace ba2
 				switch (_files.index()) {
 				case igeneral:
 					for (auto& file : std::get<igeneral>(_files)) {
-						file.read_name(input);
+						file->read_name(input);
 					}
 					break;
 				case itexture:
 					for (auto& file : std::get<itexture>(_files)) {
-						file.read_name(input);
+						file->read_name(input);
 					}
 					break;
 				default:
@@ -2505,13 +2766,109 @@ namespace ba2
 			[[maybe_unused]] bool dummy = true;
 		}
 
+	protected:
+		friend class file_iterator;
+
+		using cgeneral = std::vector<detail::general_ptr>;
+		using ctexture = std::vector<detail::texture_ptr>;
+
+		enum : std::size_t { igeneral, itexture };
+
+		[[nodiscard]] inline const cgeneral& general_files() const { return std::get<cgeneral>(_files); }
+		[[nodiscard]] inline const ctexture& texture_files() const { return std::get<ctexture>(_files); }
+
 	private:
-		using cgeneral = std::vector<detail::general_t>;
-		using ctexture = std::vector<detail::texture_t>;
-
-		enum { igeneral, itexture };
-
 		std::variant<cgeneral, ctexture> _files;
 		detail::header_t _header;
+	};
+
+
+	class file_iterator
+	{
+	public:
+		using value_type = file_entry;
+		using reference = value_type&;
+		using pointer = value_type*;
+
+		constexpr file_iterator() noexcept :
+			_files(std::nullopt),
+			_pos(NPOS)
+		{}
+
+		inline file_iterator(const file_iterator& a_rhs) :
+			_files(a_rhs._files),
+			_pos(a_rhs._pos)
+		{}
+
+		inline file_iterator(file_iterator&& a_rhs) noexcept :
+			_files(std::move(a_rhs._files)),
+			_pos(std::move(a_rhs._pos))
+		{
+			a_rhs._pos = NPOS;
+		}
+
+		explicit inline file_iterator(const archive& a_archive) :
+			_files(std::in_place_t()),
+			_pos(0)
+		{
+			if (a_archive.general()) {
+				for (auto& general : a_archive.general_files()) {
+					_files->emplace_back(general_file(general));
+				}
+			} else if (a_archive.directx()) {
+				for (auto& texture : a_archive.texture_files()) {
+					_files->emplace_back(texture_file(texture));
+				}
+			} else {
+				_files.reset();
+				_pos = NPOS;
+			}
+		}
+
+		inline file_iterator& operator=(const file_iterator& a_rhs)
+		{
+			if (this != std::addressof(a_rhs)) {
+				_files = a_rhs._files;
+				_pos = a_rhs._pos;
+			}
+			return *this;
+		}
+
+		inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
+		{
+			if (this != std::addressof(a_rhs)) {
+				_files = std::move(a_rhs._files);
+				_pos = std::move(a_rhs._pos);
+				a_rhs._pos = NPOS;
+			}
+			return *this;
+		}
+
+		[[nodiscard]] friend constexpr bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
+		[[nodiscard]] friend constexpr bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+
+		[[nodiscard]] inline reference operator*() { return fetch(); }
+		[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
+
+		inline file_iterator& operator++()
+		{
+			++_pos;
+			if (_pos >= _files->size()) {
+				_files.reset();
+				_pos = NPOS;
+			}
+			return *this;
+		}
+
+		[[nodiscard]] friend inline file_iterator begin(file_iterator a_iter) noexcept { return a_iter; }
+		[[nodiscard]] friend inline file_iterator end([[maybe_unused]] const file_iterator&) noexcept { return {}; }
+
+	private:
+		inline reference fetch() { return _files.value()[_pos]; }
+
+		static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
+
+		std::optional<std::vector<value_type>> _files;
+		std::size_t _pos;
 	};
 }

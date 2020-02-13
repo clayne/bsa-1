@@ -58,6 +58,9 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 			}
 
 			archive.read(sysEntry.path());
+			for (auto& file : ba2::file_iterator(archive)) {
+				std::cout << file.string() << '\n';
+			}
 			[[maybe_unused]] bool dummy = true;
 		}
 	}
