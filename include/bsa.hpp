@@ -4,7 +4,6 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
-#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -1658,6 +1657,21 @@ namespace ba2
 	using version_error = bsa::version_error;
 
 
+	// non-ascii characters have negative values, and beth doesn't cast them to their unsigned
+	// counterparts while remapping them, so you get something like "remaptable[-17]" which
+	// is possibly the most bethesda thing they could do
+	class hash_error : public exception
+	{
+	public:
+		inline hash_error() noexcept : hash_error("encountered a non ascii character during hash generation") {}
+		inline hash_error(const hash_error&) noexcept = default;
+		inline hash_error(const char* a_what) noexcept : exception(a_what) {}
+		virtual ~hash_error() noexcept = default;
+
+		hash_error& operator=(const hash_error&) noexcept = default;
+	};
+
+
 	using archive_version = std::size_t;
 	static constexpr archive_version v1 = 1;
 
@@ -2410,6 +2424,12 @@ namespace ba2
 
 			[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
 			{
+				for (auto& ch : a_path) {
+					if (ch < 0) {
+						throw hash_error();
+					}
+				}
+
 				auto [file, extension, directory] = normalize(std::move(a_path));
 				hash_t hash;
 				auto& block = hash.block_ref();
@@ -2938,12 +2958,13 @@ namespace ba2
 				std::visit([](auto&& a_files)
 				{
 					for (const auto& file : a_files) {
-						if (file->str_ref() == "Sound\\Voice\\Fallout4.esm\\RobotMrHandy\\María_F.fuz") {
-							[[maybe_unused]] bool dummy = true;
-						}
-						auto hash = detail::file_hasher()(file->str_ref());
-						if (hash != file->hash_ref()) {
-							assert(false);
+						try {
+							auto hash = detail::file_hasher()(file->str_ref());
+							if (hash != file->hash_ref()) {
+								assert(false);
+							}
+						} catch ([[maybe_unused]] hash_error&) {
+							continue;
 						}
 					}
 				}, _files);

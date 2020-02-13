@@ -57,12 +57,10 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 				continue;
 			}
 
-			//archive.read(sysEntry.path());
-			archive.read("E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data\\Fallout4 - Voices.ba2");
+			archive.read(sysEntry.path());
 			for (auto& file : ba2::file_iterator(archive)) {
 				std::cout << file.string() << '\n';
 			}
-			[[maybe_unused]] bool dummy = true;
 		}
 	}
 #endif
