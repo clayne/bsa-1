@@ -6,9 +6,33 @@
 #include "bsa.hpp"
 
 
-int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
+void parse_tes3()
 {
-#if 0
+	constexpr const char* PATHS[] = {
+		"E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files"
+	};
+
+	std::filesystem::path path;
+	std::regex regex(".*.bsa", std::regex_constants::grep | std::regex_constants::icase);
+	bsa::tes3::archive archive;
+	std::ios_base::sync_with_stdio(false);
+
+	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
+		path = PATHS[i];
+
+		for (auto& sysEntry : std::filesystem::directory_iterator(path)) {
+			if (!std::regex_match(sysEntry.path().string(), regex)) {
+				continue;
+			}
+
+			archive.read(sysEntry.path());
+		}
+	}
+}
+
+
+void parse_tes4()
+{
 	constexpr const char* PATHS[] = {
 		"E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim Special Edition\\Data",
 		"D:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim\\Data",
@@ -39,7 +63,11 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 			}
 		}
 	}
-#else
+}
+
+
+void parse_fo4()
+{
 	constexpr const char* PATHS[] = {
 		"E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data"
 	};
@@ -63,7 +91,14 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 			}
 		}
 	}
-#endif
+}
+
+
+int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
+{
+	parse_tes3();
+	//parse_tes4();
+	//parse_fo4();
 
 	return EXIT_SUCCESS;
 }

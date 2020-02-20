@@ -217,14 +217,61 @@ namespace bsa
 
 	namespace tes3	// The Elder Scrolls III: Morrowind
 	{
+		using archive_version = std::size_t;
+		static constexpr archive_version v256 = 256;
+
+
 		namespace detail
 		{
 			using namespace bsa::detail;
 
 
+			class file_t;
+			class hash_t;
+			class header_t;
+
+
 			class header_t
 			{
 			public:
+				constexpr header_t() noexcept :
+					_block()
+				{}
+
+				constexpr header_t(const header_t& a_rhs) noexcept :
+					_block(a_rhs._block)
+				{}
+
+				constexpr header_t(header_t&& a_rhs) noexcept :
+					_block(std::move(a_rhs._block))
+				{}
+
+				constexpr header_t& operator=(const header_t& a_rhs) noexcept
+				{
+					if (this != std::addressof(a_rhs)) {
+						_block = a_rhs._block;
+					}
+					return *this;
+				}
+
+				constexpr header_t& operator=(header_t&& a_rhs) noexcept
+				{
+					if (this != std::addressof(a_rhs)) {
+						_block = std::move(a_rhs._block);
+					}
+					return *this;
+				}
+
+				[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t> (_block.fileCount); }
+				[[nodiscard]] constexpr std::size_t hash_offset() const noexcept { return static_cast<std::size_t> (_block.hashOffset); }
+				[[nodiscard]] constexpr archive_version version() const noexcept { return static_cast<archive_version>(_block.version); }
+
+				constexpr void clear() noexcept { _block = block_t(); }
+
+				inline void read(istream_t& a_input)
+				{
+					_block.read(a_input);
+				}
 
 			private:
 				struct block_t
@@ -276,8 +323,320 @@ namespace bsa
 					std::uint32_t hashOffset;
 					std::uint32_t fileCount;
 				};
+
+				block_t _block;
 			};
+
+
+			class hash_t
+			{
+			public:
+				constexpr hash_t() noexcept :
+					_block()
+				{}
+
+				constexpr hash_t(const hash_t& a_rhs) noexcept :
+					_block(a_rhs._block)
+				{}
+
+				constexpr hash_t(hash_t&& a_rhs) noexcept :
+					_block(std::move(a_rhs._block))
+				{}
+
+				constexpr hash_t& operator=(const hash_t& a_rhs) noexcept
+				{
+					if (this != std::addressof(a_rhs)) {
+						_block = a_rhs._block;
+					}
+					return *this;
+				}
+
+				constexpr hash_t& operator=(hash_t&& a_rhs) noexcept
+				{
+					if (this != std::addressof(a_rhs)) {
+						_block = std::move(a_rhs._block);
+					}
+					return *this;
+				}
+
+				inline void read(istream_t& a_input)
+				{
+					_block.read(a_input);
+				}
+
+			private:
+				struct block_t
+				{
+					constexpr block_t() noexcept :
+						hash(0)
+					{}
+
+					constexpr block_t(const block_t& a_rhs) noexcept :
+						hash(a_rhs.hash)
+					{}
+
+					constexpr block_t(block_t&& a_rhs) noexcept :
+						hash(std::move(a_rhs.hash))
+					{}
+
+					constexpr block_t& operator=(const block_t& a_rhs) noexcept
+					{
+						if (this != std::addressof(a_rhs)) {
+							hash = a_rhs.hash;
+						}
+						return *this;
+					}
+
+					constexpr block_t& operator=(block_t&& a_rhs) noexcept
+					{
+						if (this != std::addressof(a_rhs)) {
+							hash = std::move(a_rhs.hash);
+						}
+						return *this;
+					}
+
+					inline void read(istream_t& a_input)
+					{
+						a_input.read(reinterpret_cast<char*>(this), sizeof(block_t));
+					}
+
+					std::uint64_t hash;
+				};
+
+				block_t _block;
+			};
+
+
+			class file_t
+			{
+			public:
+				inline file_t() noexcept :
+					_hash(),
+					_block(),
+					_name()
+				{}
+
+				inline file_t(const file_t& a_rhs) :
+					_hash(a_rhs._hash),
+					_block(a_rhs._block),
+					_name(a_rhs._name)
+				{}
+
+				inline file_t(file_t&& a_rhs) noexcept :
+					_hash(std::move(a_rhs._hash)),
+					_block(std::move(a_rhs._block)),
+					_name(std::move(a_rhs._name))
+				{}
+
+				inline file_t& operator=(const file_t& a_rhs)
+				{
+					if (this != std::addressof(a_rhs)) {
+						_hash = a_rhs._hash;
+						_block = a_rhs._block;
+						_name = a_rhs._name;
+					}
+					return *this;
+				}
+
+				inline file_t& operator=(file_t&& a_rhs) noexcept
+				{
+					if (this != std::addressof(a_rhs)) {
+						_hash = std::move(a_rhs._hash);
+						_block = std::move(a_rhs._block);
+						_name = std::move(a_rhs._name);
+					}
+					return *this;
+				}
+
+				inline void read(istream_t& a_input)
+				{
+					_block.read(a_input);
+				}
+
+				inline void read_hash(istream_t& a_input)
+				{
+					_hash.read(a_input);
+				}
+
+				inline void read_name(istream_t& a_input)
+				{
+					char ch;
+					do {
+						a_input->get(ch);
+						_name.push_back(ch);
+					} while (ch != '\0' && a_input);
+					_name.pop_back();
+
+					if (!a_input) {
+						throw input_error();
+					}
+				}
+
+			private:
+				struct block_t
+				{
+					constexpr block_t() noexcept :
+						size(0),
+						offset(0)
+					{}
+
+					constexpr block_t(const block_t& a_rhs) noexcept :
+						size(a_rhs.size),
+						offset(a_rhs.offset)
+					{}
+
+					constexpr block_t(block_t&& a_rhs) noexcept :
+						size(std::move(a_rhs.size)),
+						offset(std::move(a_rhs.offset))
+					{}
+
+					constexpr block_t& operator=(const block_t& a_rhs) noexcept
+					{
+						if (this != std::addressof(a_rhs)) {
+							size = a_rhs.size;
+							offset = a_rhs.offset;
+						}
+						return *this;
+					}
+
+					constexpr block_t& operator=(block_t&& a_rhs) noexcept
+					{
+						if (this != std::addressof(a_rhs)) {
+							size = std::move(a_rhs.size);
+							offset = std::move(a_rhs.offset);
+						}
+						return *this;
+					}
+
+					inline void read(istream_t& a_input)
+					{
+						a_input.read(reinterpret_cast<char*>(this), sizeof(block_t));
+					}
+
+					std::uint32_t size;
+					std::uint32_t offset;
+				};
+
+				hash_t _hash;
+				block_t _block;
+				std::string _name;
+			};
+			using file_ptr = std::shared_ptr<file_t>;
 		}
+
+
+		class archive;
+
+
+		class archive
+		{
+		public:
+			inline archive() noexcept :
+				_files(),
+				_header()
+			{}
+
+			inline archive(const archive& a_rhs) :
+				_files(a_rhs._files),
+				_header(a_rhs._header)
+			{}
+
+			inline archive(archive&& a_rhs) noexcept :
+				_files(std::move(a_rhs._files)),
+				_header(std::move(a_rhs._header))
+			{}
+
+			inline archive(const std::filesystem::path& a_path) :
+				_files(),
+				_header()
+			{
+				read(a_path);
+			}
+
+			inline archive(std::filesystem::path&& a_path) :
+				_files(),
+				_header()
+			{
+				read(std::move(a_path));
+			}
+
+			inline archive(std::istream& a_stream) :
+				_files(),
+				_header()
+			{
+				read(a_stream);
+			}
+
+			inline archive& operator=(const archive& a_rhs)
+			{
+				if (this != std::addressof(a_rhs)) {
+					_files = a_rhs._files;
+					_header = a_rhs._header;
+				}
+				return *this;
+			}
+
+			inline archive& operator=(archive&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_files = std::move(a_rhs._files);
+					_header = std::move(a_rhs._header);
+				}
+				return *this;
+			}
+
+			inline void clear() noexcept { _files.clear(); _header.clear(); }
+
+			inline void read(const std::filesystem::path& a_path)
+			{
+				std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
+				if (file.is_open()) {
+					read(file);
+				}
+			}
+
+			inline void read(std::filesystem::path&& a_path)
+			{
+				read(a_path);
+			}
+
+			inline void read(std::istream& a_input)
+			{
+				detail::istream_t input(a_input);
+
+				clear();
+
+				_header.read(input);
+				switch (_header.version()) {
+				case v256:
+					break;
+				default:
+					throw version_error();
+				}
+
+				_files.reserve(_header.file_count());
+				for (std::size_t i = 0; i < _header.file_count(); ++i) {
+					auto file = std::make_shared<detail::file_t>();
+					file->read(input);
+					_files.push_back(std::move(file));
+				}
+
+				input.seekg_rel(static_cast<std::streamoff>(4 * _header.file_count()));	// skip name offsets
+				for (auto& file : _files) {
+					file->read_name(input);
+				}
+
+				for (auto& file : _files) {
+					file->read_hash(input);
+				}
+
+				[[maybe_unused]] bool dummy = true;
+			}
+
+		private:
+			std::vector<detail::file_ptr> _files;
+			detail::header_t _header;
+		};
 	}
 
 
