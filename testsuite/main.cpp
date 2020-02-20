@@ -19,7 +19,7 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 
 	std::filesystem::path path;
 	std::regex regex(".*.bsa", std::regex_constants::grep | std::regex_constants::icase);
-	bsa::archive archive;
+	bsa::tes4::archive archive;
 	std::ios_base::sync_with_stdio(false);
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
@@ -31,9 +31,9 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 			}
 
 			archive.read(sysEntry.path());
-			for (auto& dir : bsa::directory_iterator(archive)) {
+			for (auto& dir : bsa::tes4::directory_iterator(archive)) {
 				std::cout << dir.string() << '\n';
-				for (auto& file : bsa::file_iterator(dir)) {
+				for (auto& file : bsa::tes4::file_iterator(dir)) {
 					std::cout << '\t' << file.string() << '\n';
 				}
 			}
@@ -46,7 +46,7 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 
 	std::filesystem::path path;
 	std::regex regex(".*.ba2", std::regex_constants::grep | std::regex_constants::icase);
-	ba2::archive archive;
+	bsa::fo4::archive archive;
 	std::ios_base::sync_with_stdio(false);
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
@@ -58,7 +58,7 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 			}
 
 			archive.read(sysEntry.path());
-			for (auto& file : ba2::file_iterator(archive)) {
+			for (auto& file : bsa::fo4::file_iterator(archive)) {
 				std::cout << file.string() << '\n';
 			}
 		}
