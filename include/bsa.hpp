@@ -40,18 +40,42 @@ namespace bsa
 	};
 
 
-	// non-ascii characters have negative values, and beth doesn't cast them to their unsigned
-	// counterparts while remapping them, so you get something like "remaptable[-17]" which
-	// is possibly the most bethesda thing they could do
 	class hash_error : public exception
 	{
 	public:
-		inline hash_error() noexcept : hash_error("encountered a non ascii character during hash generation") {}
+		inline hash_error() noexcept : hash_error("encountered an error during hash generation") {}
 		inline hash_error(const hash_error&) noexcept = default;
 		inline hash_error(const char* a_what) noexcept : exception(a_what) {}
 		virtual ~hash_error() noexcept = default;
 
 		hash_error& operator=(const hash_error&) noexcept = default;
+	};
+
+
+	// non-ascii characters have negative values, and beth doesn't cast them to their unsigned
+	// counterparts while remapping them, so you get something like "remaptable[-17]" which
+	// is possibly the most bethesda thing they could do
+	class hash_non_ascii : public hash_error
+	{
+	public:
+		inline hash_non_ascii() noexcept : hash_non_ascii("encountered a non ascii character during hash generation") {}
+		inline hash_non_ascii(const hash_non_ascii&) noexcept = default;
+		inline hash_non_ascii(const char* a_what) noexcept : hash_error(a_what) {}
+		virtual ~hash_non_ascii() noexcept = default;
+
+		hash_non_ascii& operator=(const hash_non_ascii&) noexcept = default;
+	};
+
+
+	class hash_empty : public hash_error
+	{
+	public:
+		inline hash_empty() noexcept : hash_empty("the given path was empty") {}
+		inline hash_empty(const hash_empty&) noexcept = default;
+		inline hash_empty(const char* a_what) noexcept : hash_error(a_what) {}
+		virtual ~hash_empty() noexcept = default;
+
+		hash_empty& operator=(const hash_empty&) noexcept = default;
 	};
 
 
@@ -87,6 +111,42 @@ namespace bsa
 
 	namespace detail
 	{
+		template <class T, typename std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
+		[[nodiscard]] constexpr T rotl(T a_val, int a_pos) noexcept;
+		template <class T, typename std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
+		[[nodiscard]] constexpr T rotr(T a_val, int a_pos) noexcept;
+
+
+		template <class T, typename std::enable_if_t<std::is_unsigned_v<T>, int>>
+		[[nodiscard]] constexpr T rotl(T a_val, int a_pos) noexcept
+		{
+			constexpr auto N = std::numeric_limits<T>::digits;
+			auto rot = a_pos % N;
+			if (rot == 0) {
+				return a_val;
+			} else if (rot < 0) {
+				return rotr(a_val, -rot);
+			} else {
+				return (a_val << rot) | (a_val >> (N - rot));
+			}
+		}
+
+
+		template <class T, typename std::enable_if_t<std::is_unsigned_v<T>, int>>
+		[[nodiscard]] constexpr T rotr(T a_val, int a_pos) noexcept
+		{
+			constexpr auto N = std::numeric_limits<T>::digits;
+			auto rot = a_pos % N;
+			if (rot == 0) {
+				return a_val;
+			} else if (rot < 0) {
+				return rotl(a_val, -rot);
+			} else {
+				return (a_val >> rot) | (a_val << (N - rot));
+			}
+		}
+
+
 		template <class T>
 		inline void swap_endian(T& a_val)
 		{
@@ -226,6 +286,7 @@ namespace bsa
 			using namespace bsa::detail;
 
 
+			class file_hasher;
 			class file_t;
 			class hash_t;
 			class header_t;
@@ -332,21 +393,21 @@ namespace bsa
 			{
 			public:
 				constexpr hash_t() noexcept :
-					_block()
+					_impl()
 				{}
 
 				constexpr hash_t(const hash_t& a_rhs) noexcept :
-					_block(a_rhs._block)
+					_impl(a_rhs._impl)
 				{}
 
 				constexpr hash_t(hash_t&& a_rhs) noexcept :
-					_block(std::move(a_rhs._block))
+					_impl(std::move(a_rhs._impl))
 				{}
 
 				constexpr hash_t& operator=(const hash_t& a_rhs) noexcept
 				{
 					if (this != std::addressof(a_rhs)) {
-						_block = a_rhs._block;
+						_impl = a_rhs._impl;
 					}
 					return *this;
 				}
@@ -354,56 +415,79 @@ namespace bsa
 				constexpr hash_t& operator=(hash_t&& a_rhs) noexcept
 				{
 					if (this != std::addressof(a_rhs)) {
-						_block = std::move(a_rhs._block);
+						_impl = std::move(a_rhs._impl);
 					}
 					return *this;
 				}
 
+				[[nodiscard]] friend constexpr bool operator==(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_lhs.numeric() == a_rhs.numeric(); }
+				[[nodiscard]] friend constexpr bool operator!=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+
+				[[nodiscard]] friend constexpr bool operator<(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_lhs.numeric() < a_rhs.numeric(); }
+				[[nodiscard]] friend constexpr bool operator>(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_rhs < a_lhs; }
+				[[nodiscard]] friend constexpr bool operator<=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
+				[[nodiscard]] friend constexpr bool operator>=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
+
+				[[nodiscard]] constexpr std::uint64_t numeric() const noexcept { return _impl.numeric; }
+
 				inline void read(istream_t& a_input)
 				{
-					_block.read(a_input);
+					_impl.read(a_input);
 				}
 
-			private:
+			protected:
+				friend class file_hasher;
+
 				struct block_t
 				{
-					constexpr block_t() noexcept :
-						hash(0)
+					std::uint32_t lo;
+					std::uint32_t hi;
+				};
+
+				[[nodiscard]] constexpr block_t& block_ref() noexcept { return _impl.block; }
+				[[nodiscard]] constexpr const block_t& block_ref() const noexcept { return _impl.block; }
+
+			private:
+				union NumericBlock
+				{
+					constexpr NumericBlock() noexcept :
+						numeric(0)
 					{}
 
-					constexpr block_t(const block_t& a_rhs) noexcept :
-						hash(a_rhs.hash)
+					constexpr NumericBlock(const NumericBlock& a_rhs) noexcept :
+						numeric(a_rhs.numeric)
 					{}
 
-					constexpr block_t(block_t&& a_rhs) noexcept :
-						hash(std::move(a_rhs.hash))
+					constexpr NumericBlock(NumericBlock&& a_rhs) noexcept :
+						numeric(std::move(a_rhs.numeric))
 					{}
 
-					constexpr block_t& operator=(const block_t& a_rhs) noexcept
+					constexpr NumericBlock& operator=(const NumericBlock& a_rhs) noexcept
 					{
 						if (this != std::addressof(a_rhs)) {
-							hash = a_rhs.hash;
+							numeric = a_rhs.numeric;
 						}
 						return *this;
 					}
 
-					constexpr block_t& operator=(block_t&& a_rhs) noexcept
+					constexpr NumericBlock& operator=(NumericBlock&& a_rhs) noexcept
 					{
 						if (this != std::addressof(a_rhs)) {
-							hash = std::move(a_rhs.hash);
+							numeric = std::move(a_rhs.numeric);
 						}
 						return *this;
 					}
 
 					inline void read(istream_t& a_input)
 					{
-						a_input.read(reinterpret_cast<char*>(this), sizeof(block_t));
+						a_input.read(reinterpret_cast<char*>(this), sizeof(NumericBlock));
 					}
 
-					std::uint64_t hash;
+					std::uint64_t numeric;
+					block_t block;
 				};
 
-				block_t _block;
+				NumericBlock _impl;
 			};
 
 
@@ -447,6 +531,19 @@ namespace bsa
 					}
 					return *this;
 				}
+
+				[[nodiscard]] inline const char* c_str() const noexcept { return _name.c_str(); }
+
+				[[nodiscard]] constexpr hash_t hash() const noexcept { return _hash; }
+				[[nodiscard]] constexpr hash_t& hash_ref() noexcept { return _hash; }
+				[[nodiscard]] constexpr const hash_t& hash_ref() const noexcept { return _hash; }
+
+				[[nodiscard]] constexpr std::size_t offset() const noexcept { return static_cast<std::size_t>(_block.offset); }
+
+				[[nodiscard]] constexpr std::size_t size() const noexcept { return static_cast<std::size_t>(_block.size); }
+
+				[[nodiscard]] inline std::string str() const { return _name; }
+				[[nodiscard]] constexpr const std::string& str_ref() const noexcept { return _name; }
 
 				inline void read(istream_t& a_input)
 				{
@@ -522,6 +619,77 @@ namespace bsa
 				std::string _name;
 			};
 			using file_ptr = std::shared_ptr<file_t>;
+
+
+			class file_hasher
+			{
+			public:
+				file_hasher() = default;
+				file_hasher(const file_hasher&) = default;
+				file_hasher(file_hasher&&) = default;
+
+				file_hasher& operator=(const file_hasher&) = default;
+				file_hasher& operator=(file_hasher&&) = default;
+
+				[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
+				{
+					for (auto& ch : a_path) {
+						if (ch < 0) {
+							throw hash_error();
+						}
+					}
+
+					auto fullPath = normalize(a_path);
+					return hash(fullPath);
+				}
+
+			private:
+				[[nodiscard]] constexpr hash_t hash(std::string_view a_fullPath) const
+				{
+					hash_t hash;
+					auto& block = hash.block_ref();
+
+					std::size_t midPoint = a_fullPath.size() >> 1;
+					std::size_t i = 0;
+					while (i < midPoint) {
+						// rotate between first 4 bytes
+						block.lo ^= static_cast<std::uint32_t>(a_fullPath[i]) << ((i % 4) * 8);
+						++i;
+					}
+
+					while (i < a_fullPath.length()) {
+						// rotate between first 4 bytes
+						auto rot = static_cast<std::uint32_t>(a_fullPath[i]) << (((i - midPoint) % 4) * 8);
+						block.hi = rotr(block.hi ^ rot, static_cast<int>(rot));
+						++i;
+					}
+
+					return hash;
+				}
+
+				[[nodiscard]] inline std::string normalize(std::string_view a_path) const
+				{
+					std::filesystem::path path(a_path);
+					path = path.lexically_normal();
+
+					std::string fullPath = path.string();
+					for (auto& ch : fullPath) {
+						ch = mapchar(ch);
+					}
+					while (!fullPath.empty() && fullPath.back() == '\\') {
+						fullPath.pop_back();
+					}
+					while (!fullPath.empty() && fullPath.front() == '\\') {
+						fullPath = fullPath.substr(1);
+					}
+
+					if (fullPath.empty()) {
+						throw hash_empty();
+					}
+
+					return fullPath;
+				}
+			};
 		}
 
 
@@ -630,10 +798,23 @@ namespace bsa
 					file->read_hash(input);
 				}
 
-				[[maybe_unused]] bool dummy = true;
+				assert(sanity_check());
 			}
 
 		private:
+			inline bool sanity_check()
+			{
+				for (auto& file : _files) {
+					auto hash = detail::file_hasher()(file->str_ref());
+					if (hash != file->hash_ref()) {
+						assert(false);
+					}
+				}
+
+				return true;
+			}
+
+
 			std::vector<detail::file_ptr> _files;
 			detail::header_t _header;
 		};
@@ -1411,7 +1592,7 @@ namespace bsa
 				}
 
 			protected:
-				[[nodiscard]] inline hash_t hash(const std::string& a_fullPath) const noexcept
+				[[nodiscard]] inline hash_t hash(std::string_view a_fullPath) const
 				{
 					constexpr auto LEN_MAX = static_cast<std::size_t>(std::numeric_limits<std::int8_t>::max());
 
@@ -1557,7 +1738,7 @@ namespace bsa
 					return std::make_pair(std::move(stem), std::move(extension));
 				}
 
-				[[nodiscard]] inline hash_t hash(const std::string& a_stem, const std::string& a_extension) const noexcept
+				[[nodiscard]] inline hash_t hash(std::string_view a_stem, std::string_view a_extension) const
 				{
 					constexpr std::array<extension_t, 6> EXTENSIONS = {
 						extension_t("\0\0\0\0"),
@@ -2922,7 +3103,7 @@ namespace bsa
 					}
 				};
 
-				[[nodiscard]] constexpr std::uint32_t hash_string(std::string_view a_string) const noexcept
+				[[nodiscard]] constexpr std::uint32_t hash_string(std::string_view a_string) const
 				{
 					std::uint32_t hash = 0;
 					for (auto& ch : a_string) {
