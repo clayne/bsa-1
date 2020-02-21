@@ -41,6 +41,19 @@ namespace bsa
 	};
 
 
+	// typically thrown when converting from std::size_t to std::uint32_t/std::int32_t for writes
+	class conversion_error : public exception
+	{
+	public:
+		inline conversion_error() noexcept : conversion_error("an integer was larger than what a field could hold") {}
+		inline conversion_error(const conversion_error&) noexcept = default;
+		inline conversion_error(const char* a_what) noexcept : exception(a_what) {}
+		virtual ~conversion_error() noexcept = default;
+
+		conversion_error& operator=(const conversion_error&) noexcept = default;
+	};
+
+
 	class hash_error : public exception
 	{
 	public:
@@ -324,6 +337,7 @@ namespace bsa
 			inline ostream_t& write(const char_type* a_str, std::streamsize a_count) { if (!_stream.write(a_str, a_count)) throw output_error(); return *this; }
 
 			[[nodiscard]] inline pos_type tell() { return _stream.tellp(); }
+			[[nodiscard]] inline pos_type tell_rel() { return tell() - _beg; }
 
 			inline ostream_t& seek_abs(pos_type a_pos) { if (!_stream.seekp(a_pos)) throw output_error(); return *this; }	// seek absolute position
 			inline ostream_t& seek_beg() { if (!_stream.seekp(_beg)) throw output_error(); return *this; }	// seek to beginning
@@ -397,11 +411,34 @@ namespace bsa
 				[[nodiscard]] constexpr std::size_t hash_offset() const noexcept { return static_cast<std::size_t> (_block.hashOffset); }
 				[[nodiscard]] constexpr archive_version version() const noexcept { return static_cast<archive_version>(_block.version); }
 
+				constexpr void set_file_count(std::size_t a_count)
+				{
+					if (a_count > std::numeric_limits<std::uint32_t>::max()) {
+						throw conversion_error();
+					} else {
+						_block.fileCount = static_cast<std::uint32_t>(a_count);
+					}
+				}
+
+				constexpr void set_hash_offset(std::size_t a_offset)
+				{
+					if (a_offset > std::numeric_limits<std::uint32_t>::max()) {
+						throw conversion_error();
+					} else {
+						_block.hashOffset = static_cast<std::uint32_t>(a_offset);
+					}
+				}
+
 				constexpr void clear() noexcept { _block = block_t(); }
 
 				inline void read(istream_t& a_input)
 				{
 					_block.read(a_input);
+				}
+
+				inline void write(ostream_t& a_output) const
+				{
+					_block.write(a_output);
 				}
 
 			private:
@@ -448,6 +485,11 @@ namespace bsa
 					inline void read(istream_t& a_input)
 					{
 						a_input.read(reinterpret_cast<char*>(this), sizeof(block_t));
+					}
+
+					inline void write(ostream_t& a_output) const
+					{
+						a_output.write(reinterpret_cast<const char*>(this), sizeof(block_t));
 					}
 
 					std::uint32_t version;
@@ -509,6 +551,11 @@ namespace bsa
 					_impl.read(a_input);
 				}
 
+				inline void write(ostream_t& a_output) const
+				{
+					_impl.write(a_output);
+				}
+
 			protected:
 				friend class file_hasher;
 
@@ -555,6 +602,11 @@ namespace bsa
 					inline void read(istream_t& a_input)
 					{
 						a_input.read(reinterpret_cast<char*>(this), sizeof(NumericBlock));
+					}
+
+					inline void write(ostream_t& a_output) const
+					{
+						a_output.write(reinterpret_cast<const char*>(this), sizeof(NumericBlock));
 					}
 
 					std::uint64_t numeric;
@@ -620,12 +672,23 @@ namespace bsa
 				[[nodiscard]] constexpr hash_t& hash_ref() noexcept { return _hash; }
 				[[nodiscard]] constexpr const hash_t& hash_ref() const noexcept { return _hash; }
 
+				[[nodiscard]] inline std::size_t name_size() const noexcept { return _name.size() + 1; }
+
 				[[nodiscard]] constexpr std::size_t offset() const noexcept { return static_cast<std::size_t>(_block.offset); }
 
 				[[nodiscard]] constexpr std::size_t size() const noexcept { return static_cast<std::size_t>(_block.size); }
 
 				[[nodiscard]] inline std::string str() const { return _name; }
 				[[nodiscard]] constexpr const std::string& str_ref() const noexcept { return _name; }
+
+				constexpr void set_offset(std::size_t a_offset)
+				{
+					if (a_offset > std::numeric_limits<std::uint32_t>::max()) {
+						throw conversion_error();
+					} else {
+						_block.offset = static_cast<std::uint32_t>(a_offset);
+					}
+				}
 
 				inline void read(istream_t& a_input)
 				{
@@ -674,6 +737,30 @@ namespace bsa
 					}
 				}
 
+				inline void write(ostream_t& a_output) const
+				{
+					_block.write(a_output);
+				}
+
+				inline void write_data(ostream_t& a_output) const
+				{
+					if (!_data) {
+						throw output_error();
+					}
+
+					a_output.write(_data->data(), static_cast<std::streamsize>(_data->size()));
+				}
+
+				inline void write_hash(ostream_t& a_output) const
+				{
+					_hash.write(a_output);
+				}
+
+				inline void write_name(ostream_t& a_output) const
+				{
+					a_output.write(_name.data(), static_cast<std::streamsize>(name_size()));
+				}
+
 			private:
 				struct block_t
 				{
@@ -713,6 +800,11 @@ namespace bsa
 					inline void read(istream_t& a_input)
 					{
 						a_input.read(reinterpret_cast<char*>(this), sizeof(block_t));
+					}
+
+					inline void write(ostream_t& a_output) const
+					{
+						a_output.write(reinterpret_cast<const char*>(this), sizeof(block_t));
 					}
 
 					std::uint32_t size;
@@ -1076,7 +1168,9 @@ namespace bsa
 			inline void read(const std::filesystem::path& a_path)
 			{
 				std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
-				if (file.is_open()) {
+				if (!file.is_open()) {
+					throw input_error();
+				} else {
 					read(file);
 				}
 			}
@@ -1140,6 +1234,55 @@ namespace bsa
 				extract(a_path);
 			}
 
+			inline void write(const std::filesystem::path& a_path)
+			{
+				std::ofstream file(a_path, std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
+				if (!file.is_open()) {
+					throw output_error();
+				} else {
+					write(file);
+				}
+			}
+
+			inline void write(std::filesystem::path&& a_path)
+			{
+				write(a_path);
+			}
+
+			inline void write(std::ostream& a_output)
+			{
+				if constexpr (!FULL) {
+					throw output_error();
+				}
+
+				detail::ostream_t output(a_output);
+
+				auto filesByName = prepare_for_write();
+
+				_header.write(output);
+				for (auto& file : _files) {
+					file->write(output);
+				}
+
+				std::uint32_t offset = 0;
+				for (auto& file : _files) {
+					output.write(reinterpret_cast<const char*>(std::addressof(offset)), sizeof(offset));
+					offset += static_cast<std::uint32_t>(file->name_size());
+				}
+
+				for (auto& file : _files) {
+					file->write_name(output);
+				}
+
+				for (auto& file : _files) {
+					file->write_hash(output);
+				}
+
+				for (auto& file : filesByName) {
+					file->write_data(output);
+				}
+			}
+
 		private:
 			inline bool sanity_check()
 			{
@@ -1199,6 +1342,42 @@ namespace bsa
 				for (auto& file : _files) {
 					file->read_data(a_input);
 				}
+			}
+
+			[[nodiscard]] inline std::vector<detail::file_ptr> prepare_for_write()
+			{
+				update_header();
+				return update_files();
+			}
+
+			inline void update_header()
+			{
+				std::size_t namesSize = 0;
+				for (auto& file : _files) {
+					namesSize += file->name_size();
+				}
+
+				std::size_t hashOffset = (detail::file_t::block_size() + 4) * file_count();
+				hashOffset += namesSize;
+				_header.set_hash_offset(hashOffset);
+				_header.set_file_count(_files.size());
+			}
+
+			[[nodiscard]] inline std::vector<detail::file_ptr> update_files()
+			{
+				auto filesByName = _files;
+				std::sort(filesByName.begin(), filesByName.end(), [](const detail::file_ptr& a_lhs, const detail::file_ptr& a_rhs) -> bool
+				{
+					return a_lhs->str_ref() < a_rhs->str_ref();
+				});
+
+				std::size_t offset = 0;
+				for (auto& file : filesByName) {
+					file->set_offset(offset);
+					offset += file->size();
+				}
+
+				return filesByName;
 			}
 
 			std::vector<detail::file_ptr> _files;
