@@ -971,6 +971,9 @@ namespace bsa
 			[[nodiscard]] inline iterator begin() const { return iterator(_files); }
 			[[nodiscard]] inline iterator end() const noexcept { return iterator(); }
 
+			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return _header.file_count(); }
+			[[nodiscard]] constexpr archive_version version() const noexcept { return _header.version(); }
+
 			inline void clear() noexcept { _files.clear(); _header.clear(); }
 
 			inline void read(const std::filesystem::path& a_path)
