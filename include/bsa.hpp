@@ -282,6 +282,12 @@ namespace bsa
 		static constexpr archive_version v256 = 256;
 
 
+		template <bool> class basic_archive;
+		class file;
+		class file_iterator;
+		class hash;
+
+
 		namespace detail
 		{
 			using namespace bsa::detail;
@@ -501,19 +507,22 @@ namespace bsa
 				inline file_t() noexcept :
 					_hash(),
 					_block(),
-					_name()
+					_name(),
+					_data(std::nullopt)
 				{}
 
 				inline file_t(const file_t& a_rhs) :
 					_hash(a_rhs._hash),
 					_block(a_rhs._block),
-					_name(a_rhs._name)
+					_name(a_rhs._name),
+					_data(a_rhs._data)
 				{}
 
 				inline file_t(file_t&& a_rhs) noexcept :
 					_hash(std::move(a_rhs._hash)),
 					_block(std::move(a_rhs._block)),
-					_name(std::move(a_rhs._name))
+					_name(std::move(a_rhs._name)),
+					_data(std::move(a_rhs._data))
 				{}
 
 				inline file_t& operator=(const file_t& a_rhs)
@@ -522,6 +531,7 @@ namespace bsa
 						_hash = a_rhs._hash;
 						_block = a_rhs._block;
 						_name = a_rhs._name;
+						_data = a_rhs._data;
 					}
 					return *this;
 				}
@@ -532,6 +542,7 @@ namespace bsa
 						_hash = std::move(a_rhs._hash);
 						_block = std::move(a_rhs._block);
 						_name = std::move(a_rhs._name);
+						_data = std::move(a_rhs._data);
 					}
 					return *this;
 				}
@@ -552,6 +563,17 @@ namespace bsa
 				inline void read(istream_t& a_input)
 				{
 					_block.read(a_input);
+				}
+
+				inline void read_data(istream_t& a_input)
+				{
+					auto pos = a_input.tellg();
+					a_input.seekg_rel(static_cast<std::streamoff>(offset()));
+
+					_data.emplace(size(), '\0');
+					a_input.read(_data->data(), static_cast<std::streamsize>(size()));
+
+					a_input.seekg_abs(pos);
 				}
 
 				inline void read_hash(istream_t& a_input)
@@ -621,6 +643,7 @@ namespace bsa
 				hash_t _hash;
 				block_t _block;
 				std::string _name;
+				std::optional<std::vector<char>> _data;
 			};
 			using file_ptr = std::shared_ptr<file_t>;
 
@@ -695,12 +718,6 @@ namespace bsa
 				}
 			};
 		}
-
-
-		class archive;
-		class file;
-		class file_iterator;
-		class hash;
 
 
 		class hash
@@ -882,7 +899,7 @@ namespace bsa
 			}
 
 		protected:
-			friend class archive;
+			template <bool> friend class basic_archive;
 
 			explicit inline file_iterator(const std::vector<detail::file_ptr>& a_files) :
 				_files(std::in_place_t()),
@@ -908,49 +925,50 @@ namespace bsa
 		};
 
 
-		class archive
+		template <bool FULL>
+		class basic_archive
 		{
 		public:
 			using iterator = file_iterator;
 			using const_iterator = iterator;
 
-			inline archive() noexcept :
+			inline basic_archive() noexcept :
 				_files(),
 				_header()
 			{}
 
-			inline archive(const archive& a_rhs) :
+			inline basic_archive(const basic_archive& a_rhs) :
 				_files(a_rhs._files),
 				_header(a_rhs._header)
 			{}
 
-			inline archive(archive&& a_rhs) noexcept :
+			inline basic_archive(basic_archive&& a_rhs) noexcept :
 				_files(std::move(a_rhs._files)),
 				_header(std::move(a_rhs._header))
 			{}
 
-			inline archive(const std::filesystem::path& a_path) :
+			inline basic_archive(const std::filesystem::path& a_path) :
 				_files(),
 				_header()
 			{
 				read(a_path);
 			}
 
-			inline archive(std::filesystem::path&& a_path) :
+			inline basic_archive(std::filesystem::path&& a_path) :
 				_files(),
 				_header()
 			{
 				read(std::move(a_path));
 			}
 
-			inline archive(std::istream& a_stream) :
+			inline basic_archive(std::istream& a_stream) :
 				_files(),
 				_header()
 			{
 				read(a_stream);
 			}
 
-			inline archive& operator=(const archive& a_rhs)
+			inline basic_archive& operator=(const basic_archive& a_rhs)
 			{
 				if (this != std::addressof(a_rhs)) {
 					_files = a_rhs._files;
@@ -959,7 +977,7 @@ namespace bsa
 				return *this;
 			}
 
-			inline archive& operator=(archive&& a_rhs) noexcept
+			inline basic_archive& operator=(basic_archive&& a_rhs) noexcept
 			{
 				if (this != std::addressof(a_rhs)) {
 					_files = std::move(a_rhs._files);
@@ -996,27 +1014,19 @@ namespace bsa
 				clear();
 
 				_header.read(input);
-				switch (_header.version()) {
+				switch (version()) {
 				case v256:
 					break;
 				default:
 					throw version_error();
 				}
 
-				_files.reserve(_header.file_count());
-				for (std::size_t i = 0; i < _header.file_count(); ++i) {
-					auto file = std::make_shared<detail::file_t>();
-					file->read(input);
-					_files.push_back(std::move(file));
-				}
+				read_initial(input);
+				read_filenames(input);
+				read_hashes(input);
 
-				input.seekg_rel(static_cast<std::streamoff>(4 * _header.file_count()));	// skip name offsets
-				for (auto& file : _files) {
-					file->read_name(input);
-				}
-
-				for (auto& file : _files) {
-					file->read_hash(input);
+				if constexpr (FULL) {
+					read_data(input);
 				}
 
 				assert(sanity_check());
@@ -1035,10 +1045,52 @@ namespace bsa
 				return true;
 			}
 
+			inline void read_initial(detail::istream_t& a_input)
+			{
+				_files.reserve(file_count());
+				for (std::size_t i = 0; i < file_count(); ++i) {
+					auto file = std::make_shared<detail::file_t>();
+					file->read(a_input);
+					_files.push_back(std::move(file));
+				}
+			}
+
+			inline void read_filenames(detail::istream_t& a_input)
+			{
+				using integer_t = std::uint32_t;
+				std::vector<integer_t> offsets(file_count());
+				for (auto& offset : offsets) {
+					a_input.read(reinterpret_cast<char*>(std::addressof(offset)), sizeof(integer_t));
+				}
+
+				auto pos = a_input.tellg();
+				for (std::size_t i = 0; i < file_count(); ++i) {
+					a_input.seekg_abs(pos + static_cast<std::streamoff>(offsets[i]));
+					_files[i]->read_name(a_input);
+				}
+			}
+
+			inline void read_hashes(detail::istream_t& a_input)
+			{
+				for (auto& file : _files) {
+					file->read_hash(a_input);
+				}
+			}
+
+			inline void read_data(detail::istream_t& a_input)
+			{
+				for (auto& file : _files) {
+					file->read_data(a_input);
+				}
+			}
 
 			std::vector<detail::file_ptr> _files;
 			detail::header_t _header;
 		};
+
+
+		using archive = basic_archive<true>;
+		using archive_view = basic_archive<false>;
 	}
 
 

@@ -14,7 +14,7 @@ void parse_tes3()
 
 	std::filesystem::path path;
 	std::regex regex(".*.bsa", std::regex_constants::grep | std::regex_constants::icase);
-	bsa::tes3::archive archive;
+	bsa::tes3::archive_view archive;
 	std::ios_base::sync_with_stdio(false);
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
