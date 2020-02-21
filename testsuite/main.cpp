@@ -6,6 +6,14 @@
 #include "bsa.hpp"
 
 
+void extract_tes3()
+{
+	std::filesystem::path path("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
+	bsa::tes3::archive archive(path);
+	archive.extract("E:\\Repos\\bsa\\mytest");
+}
+
+
 void parse_tes3()
 {
 	constexpr const char* PATHS[] = {
@@ -13,7 +21,7 @@ void parse_tes3()
 	};
 
 	std::filesystem::path path;
-	std::regex regex(".*.bsa", std::regex_constants::grep | std::regex_constants::icase);
+	std::regex regex(".*.bsa$", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::tes3::archive_view archive;
 	std::ios_base::sync_with_stdio(false);
 
@@ -45,7 +53,7 @@ void parse_tes4()
 	};
 
 	std::filesystem::path path;
-	std::regex regex(".*.bsa", std::regex_constants::grep | std::regex_constants::icase);
+	std::regex regex(".*.bsa$", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::tes4::archive archive;
 	std::ios_base::sync_with_stdio(false);
 
@@ -76,7 +84,7 @@ void parse_fo4()
 	};
 
 	std::filesystem::path path;
-	std::regex regex(".*.ba2", std::regex_constants::grep | std::regex_constants::icase);
+	std::regex regex(".*.ba2$", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::fo4::archive archive;
 	std::ios_base::sync_with_stdio(false);
 
@@ -99,7 +107,8 @@ void parse_fo4()
 
 int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 {
-	parse_tes3();
+	extract_tes3();
+	//parse_tes3();
 	//parse_tes4();
 	//parse_fo4();
 

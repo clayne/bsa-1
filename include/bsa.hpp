@@ -93,7 +93,7 @@ namespace bsa
 	class input_error : public io_error
 	{
 	public:
-		inline input_error() noexcept : input_error("failure while parsing archive") {}
+		inline input_error() noexcept : input_error("failure while performing input") {}
 		inline input_error(const input_error&) noexcept = default;
 		inline input_error(const char* a_what) noexcept : io_error(a_what) {}
 		virtual ~input_error() noexcept = default;
@@ -107,6 +107,16 @@ namespace bsa
 		inline version_error(const version_error&) noexcept = default;
 		inline version_error(const char* a_what) noexcept : input_error(a_what) {}
 		virtual ~version_error() noexcept = default;
+	};
+
+
+	class output_error : public io_error
+	{
+	public:
+		inline output_error() noexcept : output_error("failure while performing output") {}
+		inline output_error(const output_error&) noexcept = default;
+		inline output_error(const char* a_what) noexcept : io_error(a_what) {}
+		virtual ~output_error() noexcept = default;
 	};
 
 
@@ -262,12 +272,63 @@ namespace bsa
 
 			inline istream_t& read(char_type* a_str, std::streamsize a_count) { if (!_stream.read(a_str, a_count)) throw input_error(); return *this; }
 
-			[[nodiscard]] inline pos_type tellg() { return _stream.tellg(); }
+			[[nodiscard]] inline pos_type tell() { return _stream.tellg(); }
 
-			inline istream_t& seekg_abs(pos_type a_pos) { if (!_stream.seekg(a_pos)) throw input_error(); return *this; }	// seek absolute position
-			inline istream_t& seekg_beg() { if (!_stream.seekg(_beg)) throw input_error(); return *this; }	// seek to beginning
-			inline istream_t& seekg_beg(pos_type a_pos) { if (!_stream.seekg(_beg + a_pos)) throw input_error(); return *this; }	// seek from beginning
-			inline istream_t& seekg_rel(off_type a_off) { if (!_stream.seekg(a_off, std::ios_base::cur)) throw input_error(); return *this; }	// seek relative to current position
+			inline istream_t& seek_abs(pos_type a_pos) { if (!_stream.seekg(a_pos)) throw input_error(); return *this; }	// seek absolute position
+			inline istream_t& seek_beg() { if (!_stream.seekg(_beg)) throw input_error(); return *this; }	// seek to beginning
+			inline istream_t& seek_beg(pos_type a_pos) { if (!_stream.seekg(_beg + a_pos)) throw input_error(); return *this; }	// seek from beginning
+			inline istream_t& seek_rel(off_type a_off) { if (!_stream.seekg(a_off, std::ios_base::cur)) throw input_error(); return *this; }	// seek relative to current position
+
+		private:
+			stream_type& _stream;
+			pos_type _beg;
+		};
+
+
+		class ostream_t
+		{
+		public:
+			using stream_type = std::ostream;
+			using reference = stream_type&;
+			using const_reference = const stream_type&;
+			using pointer = stream_type*;
+			using const_pointer = const stream_type*;
+			using char_type = typename stream_type::char_type;
+			using pos_type = typename stream_type::pos_type;
+			using off_type = typename stream_type::off_type;
+
+			inline ostream_t() = delete;
+			inline ostream_t(const ostream_t&) = delete;
+			inline ostream_t(ostream_t&&) = delete;
+			inline ostream_t(stream_type& a_stream) :
+				_stream(a_stream),
+				_beg(a_stream.tellp())
+			{
+				if (!_stream) {
+					throw output_error();
+				}
+			}
+
+			ostream_t& operator=(const ostream_t&) = delete;
+			ostream_t& operator=(ostream_t&&) = delete;
+
+			[[nodiscard]] constexpr reference operator*() noexcept { return _stream; }
+			[[nodiscard]] constexpr const_reference operator*() const noexcept { return _stream; }
+
+			[[nodiscard]] constexpr pointer operator->() noexcept { return std::addressof(_stream); }
+			[[nodiscard]] constexpr const_pointer operator->() const noexcept { return std::addressof(_stream); }
+
+			[[nodiscard]] inline bool operator!() const { return !_stream; }
+			[[nodiscard]] explicit inline operator bool() const { return static_cast<bool>(_stream); }
+
+			inline ostream_t& write(const char_type* a_str, std::streamsize a_count) { if (!_stream.write(a_str, a_count)) throw output_error(); return *this; }
+
+			[[nodiscard]] inline pos_type tell() { return _stream.tellp(); }
+
+			inline ostream_t& seek_abs(pos_type a_pos) { if (!_stream.seekp(a_pos)) throw output_error(); return *this; }	// seek absolute position
+			inline ostream_t& seek_beg() { if (!_stream.seekp(_beg)) throw output_error(); return *this; }	// seek to beginning
+			inline ostream_t& seek_beg(pos_type a_pos) { if (!_stream.seekp(_beg + a_pos)) throw output_error(); return *this; }	// seek from beginning
+			inline ostream_t& seek_rel(off_type a_off) { if (!_stream.seekp(a_off, std::ios_base::cur)) throw output_error(); return *this; }	// seek relative to current position
 
 		private:
 			stream_type& _stream;
@@ -329,6 +390,8 @@ namespace bsa
 					}
 					return *this;
 				}
+
+				[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t); }
 
 				[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t> (_block.fileCount); }
 				[[nodiscard]] constexpr std::size_t hash_offset() const noexcept { return static_cast<std::size_t> (_block.hashOffset); }
@@ -434,6 +497,8 @@ namespace bsa
 				[[nodiscard]] friend constexpr bool operator>(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_rhs < a_lhs; }
 				[[nodiscard]] friend constexpr bool operator<=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
 				[[nodiscard]] friend constexpr bool operator>=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
+
+				[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t); }
 
 				[[nodiscard]] constexpr std::uint32_t high() const noexcept { return _impl.block.hi; }
 				[[nodiscard]] constexpr std::uint32_t low() const noexcept { return _impl.block.lo; }
@@ -547,6 +612,8 @@ namespace bsa
 					return *this;
 				}
 
+				[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t); }
+
 				[[nodiscard]] inline const char* c_str() const noexcept { return _name.c_str(); }
 
 				[[nodiscard]] constexpr hash_t hash() const noexcept { return _hash; }
@@ -567,13 +634,13 @@ namespace bsa
 
 				inline void read_data(istream_t& a_input)
 				{
-					auto pos = a_input.tellg();
-					a_input.seekg_rel(static_cast<std::streamoff>(offset()));
+					auto pos = a_input.tell();
+					a_input.seek_rel(static_cast<std::streamoff>(offset()));
 
 					_data.emplace(size(), '\0');
 					a_input.read(_data->data(), static_cast<std::streamsize>(size()));
 
-					a_input.seekg_abs(pos);
+					a_input.seek_abs(pos);
 				}
 
 				inline void read_hash(istream_t& a_input)
@@ -592,6 +659,18 @@ namespace bsa
 
 					if (!a_input) {
 						throw input_error();
+					}
+				}
+
+				inline void extract(std::ofstream& a_file)
+				{
+					if (!_data) {
+						throw output_error();
+					}
+
+					a_file.write(_data->data(), static_cast<std::streamsize>(_data->size()));
+					if (!a_file) {
+						throw output_error();
 					}
 				}
 
@@ -1032,6 +1111,35 @@ namespace bsa
 				assert(sanity_check());
 			}
 
+			inline void extract(const std::filesystem::path& a_path)
+			{
+				if constexpr (!FULL) {
+					throw output_error();
+				}
+
+				if (!std::filesystem::exists(a_path)) {
+					throw output_error();
+				}
+
+				std::filesystem::path filePath;
+				std::ofstream output;
+				for (auto& file : _files) {
+					output.close();
+					filePath = a_path / file->str_ref();
+					std::filesystem::create_directories(filePath.parent_path());
+					output.open(filePath, std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
+					if (!output.is_open()) {
+						throw output_error();
+					}
+					file->extract(output);
+				}
+			}
+
+			inline void extract(std::filesystem::path&& a_path)
+			{
+				extract(a_path);
+			}
+
 		private:
 			inline bool sanity_check()
 			{
@@ -1063,15 +1171,19 @@ namespace bsa
 					a_input.read(reinterpret_cast<char*>(std::addressof(offset)), sizeof(integer_t));
 				}
 
-				auto pos = a_input.tellg();
+				auto pos = a_input.tell();
 				for (std::size_t i = 0; i < file_count(); ++i) {
-					a_input.seekg_abs(pos + static_cast<std::streamoff>(offsets[i]));
+					a_input.seek_abs(pos + static_cast<std::streamoff>(offsets[i]));
 					_files[i]->read_name(a_input);
 				}
 			}
 
 			inline void read_hashes(detail::istream_t& a_input)
 			{
+				std::streamoff pos = static_cast<std::streamoff>(_header.hash_offset());
+				pos += static_cast<std::streamoff>(detail::header_t::block_size());
+				a_input.seek_beg(pos);
+
 				for (auto& file : _files) {
 					file->read_hash(a_input);
 				}
@@ -1079,6 +1191,11 @@ namespace bsa
 
 			inline void read_data(detail::istream_t& a_input)
 			{
+				std::streampos pos = static_cast<std::streamoff>(_header.hash_offset());
+				pos += static_cast<std::streamoff>(detail::header_t::block_size());
+				pos += static_cast<std::streamoff>(detail::hash_t::block_size() * file_count());
+				a_input.seek_beg(pos);
+
 				for (auto& file : _files) {
 					file->read_data(a_input);
 				}
@@ -1820,8 +1937,8 @@ namespace bsa
 
 				inline void read_extra(istream_t& a_input, const header_t& a_header)
 				{
-					auto pos = a_input.tellg();
-					a_input.seekg_beg(file_offset() - a_header.file_names_length());
+					auto pos = a_input.tell();
+					a_input.seek_beg(static_cast<std::streamoff>(file_offset() - a_header.file_names_length()));
 
 					if (a_header.directory_strings()) {
 						std::uint8_t length;
@@ -1836,7 +1953,7 @@ namespace bsa
 						_files.push_back(std::move(file));
 					}
 
-					a_input.seekg_abs(pos);
+					a_input.seek_abs(pos);
 				}
 
 				hash_t _hash;
@@ -2552,7 +2669,7 @@ namespace bsa
 					throw version_error();
 				}
 
-				input.seekg_beg(_header.header_size());
+				input.seek_beg(static_cast<std::streamoff>(_header.header_size()));
 				for (std::size_t i = 0; i < _header.directory_count(); ++i) {
 					auto dir = std::make_shared<detail::directory_t>();
 					dir->read(input, _header);
@@ -2561,7 +2678,7 @@ namespace bsa
 
 				auto offset = static_cast<std::streamoff>(_header.directory_names_length()) + static_cast<std::streamoff>(_header.directory_count());	// include prefixed length byte
 				offset += static_cast<std::streamoff>(_header.file_count()) * detail::file_t::block_size();
-				input.seekg_rel(offset);
+				input.seek_rel(offset);
 
 				if (_header.file_strings()) {
 					for (auto& dir : _dirs) {
@@ -3985,7 +4102,7 @@ namespace bsa
 				}
 
 				if (_header.has_string_table()) {
-					input.seekg_beg(_header.string_table_offset());
+					input.seek_beg(static_cast<std::streamoff>(_header.string_table_offset()));
 
 					switch (_files.index()) {
 					case igeneral:
