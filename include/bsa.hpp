@@ -429,6 +429,8 @@ namespace bsa
 				[[nodiscard]] friend constexpr bool operator<=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
 				[[nodiscard]] friend constexpr bool operator>=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
 
+				[[nodiscard]] constexpr std::uint32_t high() const noexcept { return _impl.block.hi; }
+				[[nodiscard]] constexpr std::uint32_t low() const noexcept { return _impl.block.lo; }
 				[[nodiscard]] constexpr std::uint64_t numeric() const noexcept { return _impl.numeric; }
 
 				inline void read(istream_t& a_input)
@@ -490,6 +492,7 @@ namespace bsa
 
 				NumericBlock _impl;
 			};
+			using hash_ref = std::reference_wrapper<hash_t>;
 
 
 			class file_t
@@ -695,11 +698,222 @@ namespace bsa
 
 
 		class archive;
+		class file;
+		class file_iterator;
+		class hash;
+
+
+		class hash
+		{
+		public:
+			hash() = delete;
+
+			inline hash(const hash& a_rhs) noexcept :
+				_impl(a_rhs._impl)
+			{}
+
+			inline hash(hash&& a_rhs) noexcept :
+				_impl(std::move(a_rhs._impl))
+			{}
+
+			inline hash& operator=(const hash& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_impl = a_rhs._impl;
+				}
+				return *this;
+			}
+
+			inline hash& operator=(hash&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_impl = std::move(a_rhs._impl);
+				}
+				return *this;
+			}
+
+			[[nodiscard]] inline std::uint32_t high_hash() const noexcept { return _impl.get().high(); }
+			[[nodiscard]] inline std::uint32_t low_hash() const noexcept { return _impl.get().low(); }
+			[[nodiscard]] inline std::uint64_t numeric_hash() const noexcept { return _impl.get().numeric(); }
+
+		protected:
+			friend class file;
+
+			explicit inline hash(detail::hash_t& a_rhs) noexcept :
+				_impl(std::ref(a_rhs))
+			{}
+
+			explicit inline hash(const detail::hash_ref& a_rhs) noexcept :
+				_impl(a_rhs)
+			{}
+
+		private:
+			detail::hash_ref _impl;
+		};
+
+
+		class file
+		{
+		public:
+			file() = delete;
+
+			inline file(const file& a_rhs) noexcept :
+				_impl(a_rhs._impl)
+			{}
+
+			inline file(file&& a_rhs) noexcept :
+				_impl(std::move(a_rhs._impl))
+			{}
+
+			inline file& operator=(const file& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_impl = a_rhs._impl;
+				}
+				return *this;
+			}
+
+			inline file& operator=(file&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_impl = std::move(a_rhs._impl);
+				}
+				return *this;
+			}
+
+			[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
+			[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
+			[[nodiscard]] inline std::size_t size() const noexcept { return _impl->size(); }
+			[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
+
+		protected:
+			friend class file_iterator;
+
+			using value_type = detail::file_ptr;
+
+			explicit inline file(const value_type& a_rhs) noexcept :
+				_impl(a_rhs)
+			{}
+
+			explicit inline file(value_type&& a_rhs) noexcept :
+				_impl(std::move(a_rhs))
+			{}
+
+		private:
+			value_type _impl;
+		};
+
+
+		class file_iterator
+		{
+		public:
+			using value_type = file;
+			using difference_type = std::ptrdiff_t;
+			using reference = value_type&;
+			using pointer = value_type*;
+			using iterator_category = std::input_iterator_tag;
+
+			inline file_iterator() noexcept :
+				_files(std::nullopt),
+				_pos(NPOS)
+			{}
+
+			inline file_iterator(const file_iterator& a_rhs) :
+				_files(a_rhs._files),
+				_pos(a_rhs._pos)
+			{}
+
+			inline file_iterator(file_iterator&& a_rhs) noexcept :
+				_files(std::move(a_rhs._files)),
+				_pos(std::move(a_rhs._pos))
+			{
+				a_rhs._pos = NPOS;
+			}
+
+			inline file_iterator& operator=(const file_iterator& a_rhs)
+			{
+				if (this != std::addressof(a_rhs)) {
+					_files = a_rhs._files;
+					_pos = a_rhs._pos;
+				}
+				return *this;
+			}
+
+			inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_files = std::move(a_rhs._files);
+					_pos = std::move(a_rhs._pos);
+					a_rhs._pos = NPOS;
+				}
+				return *this;
+			}
+
+			[[nodiscard]] friend constexpr bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
+			[[nodiscard]] friend constexpr bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+
+			[[nodiscard]] inline reference operator*() { return fetch(); }
+			[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
+
+			// prefix
+			inline file_iterator& operator++()
+			{
+				++_pos;
+				if (_pos >= _files->size()) {
+					_files.reset();
+					_pos = NPOS;
+				}
+				return *this;
+			}
+
+			// postfix
+			[[nodiscard]] inline file_iterator operator++([[maybe_unused]] int)
+			{
+				auto tmp = *this;
+				++*this;
+				return tmp;
+			}
+
+			friend inline void swap(file_iterator& a_lhs, file_iterator& a_rhs)
+			{
+				auto tmp = std::move(a_lhs);
+				a_lhs = std::move(a_rhs);
+				a_rhs = std::move(tmp);
+			}
+
+		protected:
+			friend class archive;
+
+			explicit inline file_iterator(const std::vector<detail::file_ptr>& a_files) :
+				_files(std::in_place_t()),
+				_pos(0)
+			{
+				if (!a_files.empty()) {
+					for (auto& file : a_files) {
+						_files->push_back(value_type(file));
+					}
+				} else {
+					_files.reset();
+					_pos = NPOS;
+				}
+			}
+
+		private:
+			inline reference fetch() { return _files.value()[_pos]; }
+
+			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
+
+			std::optional<std::vector<value_type>> _files;
+			std::size_t _pos;
+		};
 
 
 		class archive
 		{
 		public:
+			using iterator = file_iterator;
+			using const_iterator = iterator;
+
 			inline archive() noexcept :
 				_files(),
 				_header()
@@ -753,6 +967,9 @@ namespace bsa
 				}
 				return *this;
 			}
+
+			[[nodiscard]] inline iterator begin() const { return iterator(_files); }
+			[[nodiscard]] inline iterator end() const noexcept { return iterator(); }
 
 			inline void clear() noexcept { _files.clear(); _header.clear(); }
 
@@ -1976,6 +2193,9 @@ namespace bsa
 					for (auto& file : *a_directory) {
 						_files->push_back(value_type(file));
 					}
+				} else {
+					_files.reset();
+					_pos = NPOS;
 				}
 			}
 
@@ -2131,8 +2351,13 @@ namespace bsa
 				_dirs(std::in_place_t()),
 				_pos(0)
 			{
-				for (auto& dir : a_directories) {
-					_dirs->push_back(value_type(dir));
+				if (!a_directories.empty()) {
+					for (auto& dir : a_directories) {
+						_dirs->push_back(value_type(dir));
+					}
+				} else {
+					_dirs.reset();
+					_pos = NPOS;
 				}
 			}
 

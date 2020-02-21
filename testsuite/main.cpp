@@ -26,6 +26,9 @@ void parse_tes3()
 			}
 
 			archive.read(sysEntry.path());
+			for (auto& file : archive) {
+				std::cout << file.string() << '\n';
+			}
 		}
 	}
 }
@@ -96,9 +99,9 @@ void parse_fo4()
 
 int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 {
-	//parse_tes3();
+	parse_tes3();
 	//parse_tes4();
-	parse_fo4();
+	//parse_fo4();
 
 	return EXIT_SUCCESS;
 }
