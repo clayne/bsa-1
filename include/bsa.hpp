@@ -9,6 +9,7 @@
 #include <fstream>
 #include <functional>
 #include <istream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -1887,9 +1888,113 @@ namespace bsa
 		};
 
 
+		class file_iterator
+		{
+		public:
+			using value_type = file;
+			using difference_type = std::ptrdiff_t;
+			using reference = value_type&;
+			using pointer = value_type*;
+			using iterator_category = std::input_iterator_tag;
+
+			inline file_iterator() noexcept :
+				_files(std::nullopt),
+				_pos(NPOS)
+			{}
+
+			inline file_iterator(const file_iterator& a_rhs) :
+				_files(a_rhs._files),
+				_pos(a_rhs._pos)
+			{}
+
+			inline file_iterator(file_iterator&& a_rhs) noexcept :
+				_files(std::move(a_rhs._files)),
+				_pos(std::move(a_rhs._pos))
+			{
+				a_rhs._pos = NPOS;
+			}
+
+			inline file_iterator& operator=(const file_iterator& a_rhs)
+			{
+				if (this != std::addressof(a_rhs)) {
+					_files = a_rhs._files;
+					_pos = a_rhs._pos;
+				}
+				return *this;
+			}
+
+			inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_files = std::move(a_rhs._files);
+					_pos = std::move(a_rhs._pos);
+					a_rhs._pos = NPOS;
+				}
+				return *this;
+			}
+
+			[[nodiscard]] friend constexpr bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
+			[[nodiscard]] friend constexpr bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+
+			[[nodiscard]] inline reference operator*() { return fetch(); }
+			[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
+
+			// prefix
+			inline file_iterator& operator++()
+			{
+				++_pos;
+				if (_pos >= _files->size()) {
+					_files.reset();
+					_pos = NPOS;
+				}
+				return *this;
+			}
+
+			// postfix
+			[[nodiscard]] inline file_iterator operator++([[maybe_unused]] int)
+			{
+				auto tmp = *this;
+				++*this;
+				return tmp;
+			}
+
+			friend inline void swap(file_iterator& a_lhs, file_iterator& a_rhs)
+			{
+				auto tmp = std::move(a_lhs);
+				a_lhs = std::move(a_rhs);
+				a_rhs = std::move(tmp);
+			}
+
+		protected:
+			friend class directory;
+
+			explicit inline file_iterator(detail::directory_ptr a_directory) :
+				_files(std::in_place_t()),
+				_pos(0)
+			{
+				if (a_directory) {
+					for (auto& file : *a_directory) {
+						_files->push_back(value_type(file));
+					}
+				}
+			}
+
+		private:
+			inline reference fetch() { return _files.value()[_pos]; }
+
+			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
+
+			std::optional<std::vector<value_type>> _files;
+			std::size_t _pos;
+		};
+
+
 		class directory
 		{
 		public:
+			using iterator = file_iterator;
+			using const_iterator = iterator;
+
 			directory() = delete;
 
 			inline directory(const directory& a_rhs) noexcept :
@@ -1921,9 +2026,11 @@ namespace bsa
 			[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
 			[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
 
+			[[nodiscard]] inline iterator begin() const { return iterator(_impl); }
+			[[nodiscard]] inline iterator end() const noexcept { return iterator(); }
+
 		protected:
 			friend class directory_iterator;
-			friend class file_iterator;
 
 			using value_type = detail::directory_ptr;
 
@@ -1935,16 +2042,117 @@ namespace bsa
 				_impl(std::move(a_rhs))
 			{}
 
-			[[nodiscard]] inline value_type directory_ptr() const noexcept { return _impl; }
-
 		private:
 			value_type _impl;
+		};
+
+
+		class directory_iterator
+		{
+		public:
+			using value_type = directory;
+			using difference_type = std::ptrdiff_t;
+			using reference = value_type&;
+			using pointer = value_type*;
+			using iterator_category = std::input_iterator_tag;
+
+			constexpr directory_iterator() noexcept :
+				_dirs(std::nullopt),
+				_pos(NPOS)
+			{}
+
+			inline directory_iterator(const directory_iterator& a_rhs) :
+				_dirs(a_rhs._dirs),
+				_pos(a_rhs._pos)
+			{}
+
+			inline directory_iterator(directory_iterator&& a_rhs) noexcept :
+				_dirs(std::move(a_rhs._dirs)),
+				_pos(std::move(a_rhs._pos))
+			{
+				a_rhs._pos = NPOS;
+			}
+
+			inline directory_iterator& operator=(const directory_iterator& a_rhs)
+			{
+				if (this != std::addressof(a_rhs)) {
+					_dirs = a_rhs._dirs;
+					_pos = a_rhs._pos;
+				}
+				return *this;
+			}
+
+			inline directory_iterator& operator=(directory_iterator&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_dirs = std::move(a_rhs._dirs);
+					_pos = std::move(a_rhs._pos);
+					a_rhs._pos = NPOS;
+				}
+				return *this;
+			}
+
+			[[nodiscard]] friend constexpr bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !a_lhs._dirs && !a_rhs._dirs; }
+			[[nodiscard]] friend constexpr bool operator!=(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+
+			[[nodiscard]] inline reference operator*() { return fetch(); }
+			[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
+
+			// prefix
+			inline directory_iterator& operator++()
+			{
+				++_pos;
+				if (_pos >= _dirs->size()) {
+					_dirs.reset();
+					_pos = NPOS;
+				}
+				return *this;
+			}
+
+			// postfix
+			[[nodiscard]] inline directory_iterator operator++([[maybe_unused]] int)
+			{
+				auto tmp = *this;
+				++*this;
+				return tmp;
+			}
+
+			friend inline void swap(directory_iterator& a_lhs, directory_iterator& a_rhs)
+			{
+				auto tmp = std::move(a_lhs);
+				a_lhs = std::move(a_rhs);
+				a_rhs = std::move(tmp);
+			}
+
+		protected:
+			friend class archive;
+
+			explicit inline directory_iterator(const std::vector<detail::directory_ptr>& a_directories) :
+				_dirs(std::in_place_t()),
+				_pos(0)
+			{
+				for (auto& dir : a_directories) {
+					_dirs->push_back(value_type(dir));
+				}
+			}
+
+		private:
+			inline reference fetch() { return _dirs.value()[_pos]; }
+
+			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
+
+			std::optional<std::vector<value_type>> _dirs;
+			std::size_t _pos;
 		};
 
 
 		class archive
 		{
 		public:
+			using iterator = directory_iterator;
+			using const_iterator = iterator;
+
+
 			inline archive() noexcept :
 				_dirs(),
 				_header()
@@ -1998,6 +2206,9 @@ namespace bsa
 				}
 				return *this;
 			}
+
+			[[nodiscard]] inline iterator begin() const { return iterator(_dirs); }
+			[[nodiscard]] inline iterator end() const noexcept { return iterator(); }
 
 			[[nodiscard]] constexpr std::size_t directory_count() const noexcept { return _header.directory_count(); }
 			[[nodiscard]] constexpr std::size_t directory_names_length() const noexcept { return _header.directory_names_length(); }
@@ -2083,21 +2294,6 @@ namespace bsa
 				assert(sanity_check());
 			}
 
-		protected:
-			friend class directory_iterator;
-
-			using container_type = std::vector<detail::directory_ptr>;
-			using iterator = typename container_type::iterator;
-			using const_iterator = typename container_type::const_iterator;
-
-			[[nodiscard]] inline iterator begin() noexcept { return _dirs.begin(); }
-			[[nodiscard]] inline const_iterator begin() const noexcept { return _dirs.begin(); }
-			[[nodiscard]] inline const_iterator cbegin() const noexcept { return _dirs.cbegin(); }
-
-			[[nodiscard]] inline iterator end() noexcept { return _dirs.end(); }
-			[[nodiscard]] inline const_iterator end() const noexcept { return _dirs.end(); }
-			[[nodiscard]] inline const_iterator cend() const noexcept { return _dirs.cend(); }
-
 		private:
 			inline bool sanity_check()
 			{
@@ -2108,9 +2304,13 @@ namespace bsa
 					}
 
 					for (const auto& file : *dir) {
-						auto fHash = detail::file_hasher()(file->str_ref());
-						if (fHash != file->hash()) {
-							assert(false);
+						try {
+							auto fHash = detail::file_hasher()(file->str_ref());
+							if (fHash != file->hash()) {
+								assert(false);
+							}
+						} catch ([[maybe_unused]] hash_error& e) {
+							continue;
 						}
 					}
 				}
@@ -2118,173 +2318,8 @@ namespace bsa
 				return true;
 			}
 
-			container_type _dirs;
+			std::vector<detail::directory_ptr> _dirs;
 			detail::header_t _header;
-		};
-
-
-		class directory_iterator
-		{
-		public:
-			using value_type = directory;
-			using reference = value_type&;
-			using pointer = value_type*;
-
-			constexpr directory_iterator() noexcept :
-				_dirs(std::nullopt),
-				_pos(NPOS)
-			{}
-
-			inline directory_iterator(const directory_iterator& a_rhs) :
-				_dirs(a_rhs._dirs),
-				_pos(a_rhs._pos)
-			{}
-
-			inline directory_iterator(directory_iterator&& a_rhs) noexcept :
-				_dirs(std::move(a_rhs._dirs)),
-				_pos(std::move(a_rhs._pos))
-			{
-				a_rhs._pos = NPOS;
-			}
-
-			explicit inline directory_iterator(const archive& a_archive) :
-				_dirs(std::in_place_t()),
-				_pos(0)
-			{
-				for (auto& dir : a_archive) {
-					_dirs->push_back(value_type(dir));
-				}
-			}
-
-			inline directory_iterator& operator=(const directory_iterator& a_rhs)
-			{
-				if (this != std::addressof(a_rhs)) {
-					_dirs = a_rhs._dirs;
-					_pos = a_rhs._pos;
-				}
-				return *this;
-			}
-
-			inline directory_iterator& operator=(directory_iterator&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_dirs = std::move(a_rhs._dirs);
-					_pos = std::move(a_rhs._pos);
-					a_rhs._pos = NPOS;
-				}
-				return *this;
-			}
-
-			[[nodiscard]] friend constexpr bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !a_lhs._dirs && !a_rhs._dirs; }
-			[[nodiscard]] friend constexpr bool operator!=(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
-
-			[[nodiscard]] inline reference operator*() { return fetch(); }
-			[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
-
-			inline directory_iterator& operator++()
-			{
-				++_pos;
-				if (_pos >= _dirs->size()) {
-					_dirs.reset();
-					_pos = NPOS;
-				}
-				return *this;
-			}
-
-			[[nodiscard]] friend inline directory_iterator begin(directory_iterator a_iter) noexcept { return a_iter; }
-			[[nodiscard]] friend inline directory_iterator end([[maybe_unused]] const directory_iterator&) noexcept { return {}; }
-
-		private:
-			inline reference fetch() { return _dirs.value()[_pos]; }
-
-			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
-
-			std::optional<std::vector<value_type>> _dirs;
-			std::size_t _pos;
-		};
-
-
-		class file_iterator
-		{
-		public:
-			using value_type = file;
-			using reference = value_type&;
-			using pointer = value_type*;
-
-			inline file_iterator() noexcept :
-				_files(std::nullopt),
-				_pos(NPOS)
-			{}
-
-			inline file_iterator(const file_iterator& a_rhs) :
-				_files(a_rhs._files),
-				_pos(a_rhs._pos)
-			{}
-
-			inline file_iterator(file_iterator&& a_rhs) noexcept :
-				_files(std::move(a_rhs._files)),
-				_pos(std::move(a_rhs._pos))
-			{
-				a_rhs._pos = NPOS;
-			}
-
-			explicit inline file_iterator(const directory& a_directory) :
-				_files(std::in_place_t()),
-				_pos(0)
-			{
-				auto dir = a_directory.directory_ptr();
-				if (dir) {
-					for (auto& file : *dir) {
-						_files->push_back(value_type(file));
-					}
-				}
-			}
-
-			inline file_iterator& operator=(const file_iterator& a_rhs)
-			{
-				if (this != std::addressof(a_rhs)) {
-					_files = a_rhs._files;
-					_pos = a_rhs._pos;
-				}
-				return *this;
-			}
-
-			inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_files = std::move(a_rhs._files);
-					_pos = std::move(a_rhs._pos);
-					a_rhs._pos = NPOS;
-				}
-				return *this;
-			}
-
-			[[nodiscard]] friend constexpr bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
-			[[nodiscard]] friend constexpr bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
-
-			[[nodiscard]] inline reference operator*() { return fetch(); }
-			[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
-
-			inline file_iterator& operator++()
-			{
-				++_pos;
-				if (_pos >= _files->size()) {
-					_files.reset();
-					_pos = NPOS;
-				}
-				return *this;
-			}
-
-			[[nodiscard]] friend inline file_iterator begin(file_iterator a_iter) noexcept { return a_iter; }
-			[[nodiscard]] friend inline file_iterator end([[maybe_unused]] const file_iterator&) noexcept { return {}; }
-
-		private:
-			inline reference fetch() { return _files.value()[_pos]; }
-
-			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
-
-			std::optional<std::vector<value_type>> _files;
-			std::size_t _pos;
 		};
 	}
 
@@ -3415,9 +3450,130 @@ namespace bsa
 		};
 
 
+		class file_iterator
+		{
+		public:
+			using value_type = file_entry;
+			using difference_type = std::ptrdiff_t;
+			using reference = value_type&;
+			using pointer = value_type*;
+			using iterator_category = std::input_iterator_tag;
+
+			constexpr file_iterator() noexcept :
+				_files(std::nullopt),
+				_pos(NPOS)
+			{}
+
+			inline file_iterator(const file_iterator& a_rhs) :
+				_files(a_rhs._files),
+				_pos(a_rhs._pos)
+			{}
+
+			inline file_iterator(file_iterator&& a_rhs) noexcept :
+				_files(std::move(a_rhs._files)),
+				_pos(std::move(a_rhs._pos))
+			{
+				a_rhs._pos = NPOS;
+			}
+
+			inline file_iterator& operator=(const file_iterator& a_rhs)
+			{
+				if (this != std::addressof(a_rhs)) {
+					_files = a_rhs._files;
+					_pos = a_rhs._pos;
+				}
+				return *this;
+			}
+
+			inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_files = std::move(a_rhs._files);
+					_pos = std::move(a_rhs._pos);
+					a_rhs._pos = NPOS;
+				}
+				return *this;
+			}
+
+			[[nodiscard]] friend constexpr bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
+			[[nodiscard]] friend constexpr bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+
+			[[nodiscard]] inline reference operator*() { return fetch(); }
+			[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
+
+			// prefix
+			inline file_iterator& operator++()
+			{
+				++_pos;
+				if (_pos >= _files->size()) {
+					_files.reset();
+					_pos = NPOS;
+				}
+				return *this;
+			}
+
+			// postfix
+			[[nodiscard]] inline file_iterator operator++([[maybe_unused]] int)
+			{
+				auto tmp = *this;
+				++*this;
+				return tmp;
+			}
+
+			friend inline void swap(file_iterator& a_lhs, file_iterator& a_rhs)
+			{
+				auto tmp = std::move(a_lhs);
+				a_lhs = std::move(a_rhs);
+				a_rhs = std::move(tmp);
+			}
+
+		protected:
+			friend class archive;
+
+			explicit inline file_iterator(const std::vector<detail::general_ptr>& a_general) :
+				_files(std::in_place_t()),
+				_pos(0)
+			{
+				if (!a_general.empty()) {
+					for (auto& general : a_general) {
+						_files->emplace_back(general_file(general));
+					}
+				} else {
+					_files.reset();
+					_pos = NPOS;
+				}
+			}
+
+			explicit inline file_iterator(const std::vector<detail::texture_ptr>& a_textures) :
+				_files(std::in_place_t()),
+				_pos(0)
+			{
+				if (!a_textures.empty()) {
+					for (auto& texture : a_textures) {
+						_files->emplace_back(texture_file(texture));
+					}
+				} else {
+					_files.reset();
+					_pos = NPOS;
+				}
+			}
+
+		private:
+			inline reference fetch() { return _files.value()[_pos]; }
+
+			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
+
+			std::optional<std::vector<value_type>> _files;
+			std::size_t _pos;
+		};
+
+
 		class archive
 		{
 		public:
+			using iterator = file_iterator;
+			using const_iterator = iterator;
+
 			inline archive() noexcept :
 				_files(),
 				_header()
@@ -3469,6 +3625,20 @@ namespace bsa
 				}
 				return *this;
 			}
+
+			[[nodiscard]] inline iterator begin() const
+			{
+				switch (_files.index()) {
+				case igeneral:
+					return iterator(std::get<igeneral>(_files));
+				case itexture:
+					return iterator(std::get<itexture>(_files));
+				default:
+					return end();
+				}
+			}
+
+			[[nodiscard]] inline iterator end() const noexcept { return iterator(); }
 
 			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return _header.file_count(); }
 			[[nodiscard]] constexpr std::string_view format() const { return _header.format(); }
@@ -3556,18 +3726,12 @@ namespace bsa
 				assert(sanity_check());
 			}
 
-		protected:
-			friend class file_iterator;
-
+		private:
 			using cgeneral = std::vector<detail::general_ptr>;
 			using ctexture = std::vector<detail::texture_ptr>;
 
 			enum : std::size_t { igeneral, itexture };
 
-			[[nodiscard]] inline const cgeneral& general_files() const { return std::get<cgeneral>(_files); }
-			[[nodiscard]] inline const ctexture& texture_files() const { return std::get<ctexture>(_files); }
-
-		private:
 			inline bool sanity_check()
 			{
 				switch (_files.index()) {
@@ -3597,96 +3761,6 @@ namespace bsa
 
 			std::variant<cgeneral, ctexture> _files;
 			detail::header_t _header;
-		};
-
-
-		class file_iterator
-		{
-		public:
-			using value_type = file_entry;
-			using reference = value_type&;
-			using pointer = value_type*;
-
-			constexpr file_iterator() noexcept :
-				_files(std::nullopt),
-				_pos(NPOS)
-			{}
-
-			inline file_iterator(const file_iterator& a_rhs) :
-				_files(a_rhs._files),
-				_pos(a_rhs._pos)
-			{}
-
-			inline file_iterator(file_iterator&& a_rhs) noexcept :
-				_files(std::move(a_rhs._files)),
-				_pos(std::move(a_rhs._pos))
-			{
-				a_rhs._pos = NPOS;
-			}
-
-			explicit inline file_iterator(const archive& a_archive) :
-				_files(std::in_place_t()),
-				_pos(0)
-			{
-				if (a_archive.general()) {
-					for (auto& general : a_archive.general_files()) {
-						_files->emplace_back(general_file(general));
-					}
-				} else if (a_archive.directx()) {
-					for (auto& texture : a_archive.texture_files()) {
-						_files->emplace_back(texture_file(texture));
-					}
-				} else {
-					_files.reset();
-					_pos = NPOS;
-				}
-			}
-
-			inline file_iterator& operator=(const file_iterator& a_rhs)
-			{
-				if (this != std::addressof(a_rhs)) {
-					_files = a_rhs._files;
-					_pos = a_rhs._pos;
-				}
-				return *this;
-			}
-
-			inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_files = std::move(a_rhs._files);
-					_pos = std::move(a_rhs._pos);
-					a_rhs._pos = NPOS;
-				}
-				return *this;
-			}
-
-			[[nodiscard]] friend constexpr bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
-			[[nodiscard]] friend constexpr bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
-
-			[[nodiscard]] inline reference operator*() { return fetch(); }
-			[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
-
-			inline file_iterator& operator++()
-			{
-				++_pos;
-				if (_pos >= _files->size()) {
-					_files.reset();
-					_pos = NPOS;
-				}
-				return *this;
-			}
-
-			[[nodiscard]] friend inline file_iterator begin(file_iterator a_iter) noexcept { return a_iter; }
-			[[nodiscard]] friend inline file_iterator end([[maybe_unused]] const file_iterator&) noexcept { return {}; }
-
-		private:
-			inline reference fetch() { return _files.value()[_pos]; }
-
-			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
-
-			std::optional<std::vector<value_type>> _files;
-			std::size_t _pos;
 		};
 	}
 }

@@ -55,9 +55,9 @@ void parse_tes4()
 			}
 
 			archive.read(sysEntry.path());
-			for (auto& dir : bsa::tes4::directory_iterator(archive)) {
+			for (auto& dir : archive) {
 				std::cout << dir.string() << '\n';
-				for (auto& file : bsa::tes4::file_iterator(dir)) {
+				for (auto& file : dir) {
 					std::cout << '\t' << file.string() << '\n';
 				}
 			}
@@ -86,7 +86,7 @@ void parse_fo4()
 			}
 
 			archive.read(sysEntry.path());
-			for (auto& file : bsa::fo4::file_iterator(archive)) {
+			for (auto& file : archive) {
 				std::cout << file.string() << '\n';
 			}
 		}
@@ -96,9 +96,9 @@ void parse_fo4()
 
 int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 {
-	parse_tes3();
+	//parse_tes3();
 	//parse_tes4();
-	//parse_fo4();
+	parse_fo4();
 
 	return EXIT_SUCCESS;
 }
