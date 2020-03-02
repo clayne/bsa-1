@@ -125,6 +125,16 @@ namespace bsa
 	};
 
 
+	class empty_file : public input_error
+	{
+	public:
+		inline empty_file() noexcept : empty_file("file was empty") {}
+		inline empty_file(const empty_file&) noexcept = default;
+		inline empty_file(const char* a_what) noexcept : input_error(a_what) {}
+		virtual ~empty_file() noexcept = default;
+	};
+
+
 	class output_error : public io_error
 	{
 	public:
@@ -493,6 +503,11 @@ namespace bsa
 					}
 				}
 
+				[[nodiscard]] constexpr bool can_set_file_count(std::size_t a_count) const noexcept
+				{
+					return a_count <= static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max());
+				}
+
 				constexpr void set_hash_offset(std::size_t a_offset)
 				{
 					if (a_offset > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
@@ -857,6 +872,8 @@ namespace bsa
 
 				[[nodiscard]] inline const char* c_str() const noexcept { return _name.c_str(); }
 
+				[[nodiscard]] inline bool empty() const noexcept { return !_data || !_mtinput; }
+
 				[[nodiscard]] constexpr hash_t hash() const noexcept { return _hash; }
 				[[nodiscard]] constexpr hash_t& hash_ref() noexcept { return _hash; }
 				[[nodiscard]] constexpr const hash_t& hash_ref() const noexcept { return _hash; }
@@ -1137,16 +1154,47 @@ namespace bsa
 				return *this;
 			}
 
-			[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
-			[[nodiscard]] inline std::pair<const char*, std::size_t> extract() const { return std::make_pair(_impl->get_data(), _impl->size()); }
-			[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
+			[[nodiscard]] friend inline bool operator==(const file& a_lhs, const file& a_rhs)
+			{
+				if (!a_lhs && !a_rhs) {	// neither have value
+					return true;
+				} else if (!a_lhs != !a_rhs) {	// one has value
+					return false;
+				} else {	// both have value
+					return a_lhs._impl->hash_ref() == a_rhs._impl->hash_ref();
+				}
+			}
 
-			inline void pack(const char* a_data, std::size_t a_size) { _impl->set_data(a_data, a_size); }
-			inline void pack(std::filesystem::path a_path) { open_and_pack(a_path); }
-			inline void pack(std::istream& a_stream) { _impl->set_data(a_stream); }
+			[[nodiscard]] friend inline bool operator!=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs == a_rhs); }
 
-			[[nodiscard]] inline std::size_t size() const noexcept { return _impl->size(); }
-			[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
+			[[nodiscard]] friend inline bool operator<(const file& a_lhs, const file& a_rhs) noexcept
+			{
+				if (!a_lhs && !a_rhs) {	// neither have value
+					return true;
+				} else if (!a_lhs != !a_rhs) {	// one has value
+					return a_lhs.exists();
+				} else {	// both have value
+					return a_lhs._impl->hash_ref() < a_rhs._impl->hash_ref();
+				}
+			}
+
+			[[nodiscard]] friend inline bool operator>(const file& a_lhs, const file& a_rhs) noexcept { return a_rhs < a_lhs; }
+			[[nodiscard]] friend inline bool operator<=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs > a_rhs); }
+			[[nodiscard]] friend inline bool operator>=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs < a_rhs); }
+
+			[[nodiscard]] inline explicit operator bool() const noexcept { return exists(); }
+			[[nodiscard]] inline bool exists() const noexcept { return static_cast<bool>(_impl); }
+
+			[[nodiscard]] inline const char* c_str() const noexcept { assert(exists()); return _impl->c_str(); }
+			[[nodiscard]] inline std::pair<const char*, std::size_t> extract() const { assert(exists()); return std::make_pair(_impl->get_data(), _impl->size()); }
+			[[nodiscard]] inline hash hash_value() const noexcept { assert(exists()); return hash(_impl->hash_ref()); }
+
+			inline void pack(const char* a_data, std::size_t a_size) { assert(exists()); _impl->set_data(a_data, a_size); }
+			inline void pack(std::filesystem::path a_path) { assert(exists()); open_and_pack(a_path); }
+			inline void pack(std::istream& a_stream) { assert(exists()); _impl->set_data(a_stream); }
+
+			[[nodiscard]] inline std::size_t size() const noexcept { assert(exists()); return _impl->size(); }
+			[[nodiscard]] inline const std::string& string() const noexcept { assert(exists()); return _impl->str_ref(); }
 
 		protected:
 			friend class archive;
@@ -1196,7 +1244,7 @@ namespace bsa
 			using iterator_category = std::input_iterator_tag;
 
 			inline file_iterator() noexcept :
-				_files(std::nullopt),
+				_files(nullptr),
 				_pos(NPOS)
 			{}
 
@@ -1231,8 +1279,8 @@ namespace bsa
 				return *this;
 			}
 
-			[[nodiscard]] friend constexpr bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
-			[[nodiscard]] friend constexpr bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+			[[nodiscard]] friend inline bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return a_lhs._files == a_rhs._files && a_lhs._pos == a_rhs._pos; }
+			[[nodiscard]] friend inline bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
 
 			[[nodiscard]] inline reference operator*() { return fetch(); }
 			[[nodiscard]] inline pointer operator->() { return std::addressof(fetch()); }
@@ -1266,26 +1314,27 @@ namespace bsa
 		protected:
 			friend class archive;
 
-			explicit inline file_iterator(const std::vector<detail::file_ptr>& a_files) :
-				_files(std::in_place_t()),
-				_pos(0)
+			template <class InputIt>
+			explicit inline file_iterator(InputIt a_first, InputIt a_last) :
+				_files(nullptr),
+				_pos(NPOS)
 			{
-				if (!a_files.empty()) {
-					for (auto& file : a_files) {
-						_files->push_back(value_type(file));
-					}
-				} else {
-					_files.reset();
-					_pos = NPOS;
+				if (a_first != a_last) {
+					_files.reset(new typename decltype(_files)::element_type());
+					_pos = 0;
+					do {
+						_files->push_back(value_type(static_cast<const detail::file_ptr&>(*a_first)));
+						++a_first;
+					} while (a_first != a_last);
 				}
 			}
 
 		private:
-			inline reference fetch() { return _files.value()[_pos]; }
+			inline reference fetch() { return (*_files)[_pos]; }
 
 			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
 
-			std::optional<std::vector<value_type>> _files;
+			std::shared_ptr<std::vector<value_type>> _files;
 			std::size_t _pos;
 		};
 
@@ -1318,13 +1367,6 @@ namespace bsa
 				read(a_path);
 			}
 
-			inline archive(std::filesystem::path&& a_path) :
-				_files(),
-				_header()
-			{
-				read(std::move(a_path));
-			}
-
 			inline archive(std::unique_ptr<std::istream>&& a_stream) :
 				_files(),
 				_header()
@@ -1350,12 +1392,56 @@ namespace bsa
 				return *this;
 			}
 
-			[[nodiscard]] inline iterator begin() const { return iterator(_files); }
+			friend inline archive& operator>>(archive& a_archive, const std::filesystem::path& a_path)
+			{
+				a_archive.read(a_path);
+				return a_archive;
+			}
+
+			friend inline archive& operator>>(archive& a_archive, std::filesystem::path&& a_path)
+			{
+				a_archive.read(std::move(a_path));
+				return a_archive;
+			}
+
+			friend inline archive& operator>>(archive& a_archive, std::ifstream&& a_stream)
+			{
+				a_archive.read(std::move(a_stream));
+				return a_archive;
+			}
+
+			friend inline archive& operator>>(archive& a_archive, std::unique_ptr<std::istream>&& a_stream)
+			{
+				a_archive.read(std::move(a_stream));
+				return a_archive;
+			}
+
+			friend inline archive& operator<<(archive& a_archive, const std::filesystem::path& a_path)
+			{
+				a_archive.write(a_path);
+				return a_archive;
+			}
+
+			friend inline archive& operator<<(archive& a_archive, std::filesystem::path&& a_path)
+			{
+				a_archive.write(std::move(a_path));
+				return a_archive;
+			}
+
+			friend inline archive& operator<<(archive& a_archive, std::ostream& a_stream)
+			{
+				a_archive.write(a_stream);
+				return a_archive;
+			}
+
+			[[nodiscard]] inline iterator begin() const { return iterator(_files.begin(), _files.end()); }
 			[[nodiscard]] inline iterator end() const noexcept { return iterator(); }
 
 			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return _header.file_count(); }
 			[[nodiscard]] constexpr archive_version version() const noexcept { return _header.version(); }
 
+			[[nodiscard]] constexpr std::size_t size() const noexcept { return file_count(); }
+			[[nodiscard]] constexpr bool empty() const noexcept { return size() == 0; }
 			inline void clear() noexcept { _files.clear(); _header.clear(); }
 
 			inline void read(const std::filesystem::path& a_path)
@@ -1368,9 +1454,9 @@ namespace bsa
 				}
 			}
 
-			inline void read(std::filesystem::path&& a_path)
+			inline void read(std::ifstream&& a_input)
 			{
-				read(a_path);
+				read(std::make_unique<std::ifstream>(std::move(a_input)));
 			}
 
 			inline void read(std::unique_ptr<std::istream>&& a_input)
@@ -1417,11 +1503,6 @@ namespace bsa
 				}
 			}
 
-			inline void extract(std::filesystem::path&& a_path)
-			{
-				extract(a_path);
-			}
-
 			inline void write(const std::filesystem::path& a_path)
 			{
 				std::ofstream file(a_path, std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
@@ -1430,11 +1511,6 @@ namespace bsa
 				} else {
 					write(file);
 				}
-			}
-
-			inline void write(std::filesystem::path&& a_path)
-			{
-				write(a_path);
 			}
 
 			inline void write(std::ostream& a_output)
@@ -1469,52 +1545,151 @@ namespace bsa
 
 			inline void insert(const file& a_file)
 			{
-				_header.set_file_count(_files.size() + 1);
+				if (!_header.can_set_file_count(_files.size() + 1)) {
+					throw size_error();
+				} else if (!a_file || a_file.file_ptr()->empty()) {
+					throw empty_file();
+				}
+
 				_files.push_back(a_file.file_ptr());
-				std::sort(_files.begin(), _files.end(), file_sorter());
+				sort();
+				_header.set_file_count(_files.size());
 			}
 
 			inline void insert(file&& a_file)
 			{
-				_header.set_file_count(_files.size() + 1);
+				if (!_header.can_set_file_count(_files.size() + 1)) {
+					throw size_error();
+				} else if (!a_file || a_file.file_ptr()->empty()) {
+					throw empty_file();
+				}
+
 				_files.push_back(a_file.steal_file());
-				std::sort(_files.begin(), _files.end(), file_sorter());
+				sort();
+				_header.set_file_count(_files.size());
 			}
 
 			template <class InputIt>
 			inline void insert(InputIt a_first, InputIt a_last)
 			{
-				std::size_t count = 0;
-				for (auto it = a_first; it != a_last; ++it) {
-					++count;
+				if (!_header.can_set_file_count(_files.size() + std::distance(a_first, a_last))) {
+					throw size_error();
 				}
-				_header.set_file_count(_files.size() + count);
 
-				for (auto it = std::move(a_first); it != a_last; ++it) {
-					_files.push_back(static_cast<const file&>(*a_first).file_ptr());
+				std::vector<std::reference_wrapper<const file>> toInsert;
+				while (a_first != a_last) {
+					auto& f = static_cast<const file&>(*a_first);
+					if (!f || f.file_ptr()->empty()) {
+						throw empty_file();
+					} else if (!contains(f)) {
+						toInsert.push_back(f);
+					}
+					++a_first;
 				}
-				std::sort(_files.begin(), _files.end(), file_sorter());
+
+				std::sort(toInsert.begin(), toInsert.end());
+				auto newEnd = std::unique(toInsert.begin(), toInsert.end());
+				toInsert.erase(newEnd, toInsert.end());
+
+				for (auto& elem : toInsert) {
+					auto& f = elem.get();
+					_files.push_back(f.file_ptr());
+				}
+
+				sort();
+				_header.set_file_count(_files.size());
 			}
 
 			inline void insert(std::initializer_list<file> a_initList)
 			{
-				_header.set_file_count(_files.size() + a_initList.size());
+				insert(a_initList.begin(), a_initList.end());
+			}
 
-				for (auto& elem : a_initList) {
-					_files.push_back(elem.file_ptr());
+			inline bool erase(const file& a_file)
+			{
+				if (!a_file) {
+					return false;
 				}
 
-				std::sort(_files.begin(), _files.end(), file_sorter());
+				file_finder finder(a_file.file_ptr()->hash());
+				auto it = std::find_if(_files.begin(), _files.end(), std::move(finder));
+				if (it == _files.end()) {
+					return false;
+				}
+
+				_files.erase(it);
+				return true;
+			}
+
+			[[nodiscard]] inline file find(const std::filesystem::path& a_path)
+			{
+				auto path = a_path.string();
+				return find(path);
+			}
+
+			[[nodiscard]] inline file find(const std::string& a_path)
+			{
+				auto view = static_cast<std::string_view>(a_path);
+				return find(view);
+			}
+
+			[[nodiscard]] inline file find(const std::string_view& a_path)
+			{
+				auto it = std::find_if(_files.begin(), _files.end(), file_finder(a_path));
+				return it != _files.end() ? file(*it) : file();
+			}
+
+			[[nodiscard]] inline file find(const char* a_path)
+			{
+				std::string_view path(a_path);
+				return find(path);
+			}
+
+			[[nodiscard]] inline bool contains(const file& a_file)
+			{
+				if (!a_file) {
+					return false;
+				} else {
+					file_finder finder(a_file.file_ptr()->hash());
+					auto it = std::find_if(_files.begin(), _files.end(), std::move(finder));
+					return it != _files.end();
+				}
 			}
 
 		private:
-			struct file_sorter
+			class file_sorter
 			{
+			public:
 				[[nodiscard]] bool operator()(const detail::file_ptr& a_lhs, const detail::file_ptr& a_rhs) const
 				{
 					return *a_lhs < *a_rhs;
 				}
 			};
+
+			class file_finder
+			{
+			public:
+				inline file_finder(const std::string_view& a_path) :
+					file_finder(detail::file_hasher()(a_path))
+				{}
+
+				inline file_finder(detail::hash_t a_hash) :
+					_hash(std::move(a_hash))
+				{}
+
+				[[nodiscard]] bool operator()(const detail::file_ptr& a_val) const
+				{
+					return _hash == a_val->hash_ref();
+				}
+
+			private:
+				detail::hash_t _hash;
+			};
+
+			inline void sort()
+			{
+				std::sort(_files.begin(), _files.end(), file_sorter());
+			}
 
 			inline bool sanity_check()
 			{

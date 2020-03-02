@@ -71,11 +71,8 @@ void compare_tes3(std::filesystem::path a_lhsP, std::filesystem::path a_rhsP)
 
 void write_tes3()
 {
-	{
-		bsa::tes3::archive archive("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
-		archive.write("E:\\Repos\\bsa\\mytest.bsa");
-	}
-
+	bsa::tes3::archive archive("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
+	archive << "E:\\Repos\\bsa\\mytest.bsa";
 	compare_tes3("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa", "E:\\Repos\\bsa\\mytest.bsa");
 }
 
@@ -92,7 +89,7 @@ void repack_tes3()
 	}
 
 	archive.insert(files.begin(), files.end());
-	archive.write("E:\\Repos\\bsa\\mytest.bsa");
+	archive << "E:\\Repos\\bsa\\mytest.bsa";
 	compare_tes3("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa", "E:\\Repos\\bsa\\mytest.bsa");
 }
 
@@ -116,8 +113,13 @@ void parse_tes3()
 				continue;
 			}
 
-			archive.read(sysEntry.path());
+			archive >> sysEntry.path();
 			for (auto& file : archive) {
+				if (!archive.contains(file)) {
+					assert(false);
+				} else if (!archive.find(file.string())) {
+					assert(false);
+				}
 				std::cout << file.string() << '\n';
 			}
 		}
@@ -194,13 +196,24 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 	watch.start();
 
 	//extract_tes3();
-	repack_tes3();
+	//repack_tes3();
 	//write_tes3();
 	//parse_tes3();
 
 	//parse_tes4();
 
 	//parse_fo4();
+
+	{
+		bsa::tes3::archive src("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
+		bsa::tes3::archive dst;
+		std::vector<bsa::tes3::file> files;
+		if (!src.empty()) {
+			files.assign(20, *src.begin());
+			dst.insert(files.begin(), files.end());
+		}
+		[[maybe_unused]] bool dummy = true;
+	}
 
 	watch.time_stamp();
 
