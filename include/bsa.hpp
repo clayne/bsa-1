@@ -1462,6 +1462,9 @@ namespace bsa
 				return a_archive;
 			}
 
+			[[nodiscard]] inline file front() const { assert(!empty()); return file(_files.front()); }
+			[[nodiscard]] inline file back() const { assert(!empty()); return file(_files.back()); }
+
 			[[nodiscard]] inline iterator begin() const { return iterator(_files.begin(), _files.end()); }
 			[[nodiscard]] inline iterator end() const noexcept { return iterator(); }
 
