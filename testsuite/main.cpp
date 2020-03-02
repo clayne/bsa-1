@@ -17,32 +17,27 @@ void extract_tes3()
 void write_tes3()
 {
 	{
-		std::filesystem::path path("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
-		bsa::tes3::archive archive(path);
+		bsa::tes3::archive archive("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
 		archive.write("E:\\Repos\\bsa\\mytest.bsa");
 	}
 
-	std::filesystem::path originalPath = "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa";
-	std::filesystem::path newPath = "E:\\Repos\\bsa\\mytest.bsa";
-	if (std::filesystem::file_size(originalPath) != std::filesystem::file_size(newPath)) {
+	std::filesystem::path lhsP = "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa";
+	std::filesystem::path rhsP = "E:\\Repos\\bsa\\mytest.bsa";
+	if (std::filesystem::file_size(lhsP) != std::filesystem::file_size(rhsP)) {
 		assert(false);
 	}
 
 	constexpr auto FLAGS = std::ios_base::in | std::ios_base::binary;
-	std::ifstream originalFile(originalPath, FLAGS);
-	std::ifstream newFile(newPath, FLAGS);
+	std::ifstream lhsF(lhsP, FLAGS);
+	std::ifstream rhsF(rhsP, FLAGS);
 
-	char originalChar;
-	char newChar;
 	do {
-		originalFile.get(originalChar);
-		newFile.get(newChar);
-		if (originalChar != newChar) {
+		if (lhsF.get() != rhsF.get()) {
 			assert(false);
 		}
-	} while (originalFile && newFile);
+	} while (lhsF && rhsF);
 
-	if (!originalFile.eof() || !newFile.eof()) {
+	if (!lhsF.eof() || !rhsF.eof()) {
 		assert(false);
 	}
 }
@@ -56,7 +51,7 @@ void parse_tes3()
 
 	std::filesystem::path path;
 	std::regex regex(".*.bsa$", std::regex_constants::grep | std::regex_constants::icase);
-	bsa::tes3::archive_view archive;
+	bsa::tes3::archive archive;
 	std::ios_base::sync_with_stdio(false);
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
@@ -141,8 +136,8 @@ void parse_fo4()
 
 int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 {
-	//extract_tes3();
-	write_tes3();
+	extract_tes3();
+	//write_tes3();
 	//parse_tes3();
 
 	//parse_tes4();

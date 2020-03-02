@@ -12,6 +12,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -42,15 +43,15 @@ namespace bsa
 
 
 	// typically thrown when converting from std::size_t to std::uint32_t/std::int32_t for writes
-	class conversion_error : public exception
+	class size_error : public exception
 	{
 	public:
-		inline conversion_error() noexcept : conversion_error("an integer was larger than what a field could hold") {}
-		inline conversion_error(const conversion_error&) noexcept = default;
-		inline conversion_error(const char* a_what) noexcept : exception(a_what) {}
-		virtual ~conversion_error() noexcept = default;
+		inline size_error() noexcept : size_error("an integer was larger than what a field could hold") {}
+		inline size_error(const size_error&) noexcept = default;
+		inline size_error(const char* a_what) noexcept : exception(a_what) {}
+		virtual ~size_error() noexcept = default;
 
-		conversion_error& operator=(const conversion_error&) noexcept = default;
+		size_error& operator=(const size_error&) noexcept = default;
 	};
 
 
@@ -259,42 +260,113 @@ namespace bsa
 			using pos_type = typename stream_type::pos_type;
 			using off_type = typename stream_type::off_type;
 
-			inline istream_t() = delete;
-			inline istream_t(const istream_t&) = delete;
-			inline istream_t(istream_t&&) = delete;
-			inline istream_t(stream_type& a_stream) :
-				_stream(a_stream),
-				_beg(a_stream.tellg())
+			istream_t() = delete;
+			istream_t(const istream_t&) = delete;
+
+			inline istream_t(istream_t&& a_rhs) noexcept :
+				_stream(std::move(a_rhs._stream)),
+				_beg(std::move(a_rhs._beg))
+			{}
+
+			istream_t(const std::unique_ptr<stream_type>&) = delete;
+
+			inline istream_t(std::unique_ptr<stream_type>&& a_stream) :
+				_stream(std::move(a_stream)),
+				_beg(0)
 			{
-				if (!_stream) {
+				if (!_stream || !*_stream) {
 					throw input_error();
+				} else {
+					_beg = _stream->tellg();
+					_stream->exceptions(std::ios_base::badbit | std::ios_base::failbit | std::ios_base::failbit);
 				}
 			}
 
 			istream_t& operator=(const istream_t&) = delete;
-			istream_t& operator=(istream_t&&) = delete;
 
-			[[nodiscard]] constexpr reference operator*() noexcept { return _stream; }
-			[[nodiscard]] constexpr const_reference operator*() const noexcept { return _stream; }
+			inline istream_t& operator=(istream_t&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_stream = std::move(a_rhs._stream);
+					_beg = std::move(a_rhs._beg);
+				}
+				return *this;
+			}
 
-			[[nodiscard]] constexpr pointer operator->() noexcept { return std::addressof(_stream); }
-			[[nodiscard]] constexpr const_pointer operator->() const noexcept { return std::addressof(_stream); }
+			[[nodiscard]] inline bool operator!() const { return !*_stream; }
+			[[nodiscard]] explicit inline operator bool() const { return static_cast<bool>(*_stream); }
 
-			[[nodiscard]] inline bool operator!() const { return !_stream; }
-			[[nodiscard]] explicit inline operator bool() const { return static_cast<bool>(_stream); }
+			inline istream_t& get(char_type& a_ch) { _stream->get(a_ch); return *this; }
 
-			inline istream_t& read(char_type* a_str, std::streamsize a_count) { if (!_stream.read(a_str, a_count)) throw input_error(); return *this; }
+			inline istream_t& read(char_type* a_str, std::streamsize a_count) { _stream->read(a_str, a_count); return *this; }
 
-			[[nodiscard]] inline pos_type tell() { return _stream.tellg(); }
+			[[nodiscard]] inline pos_type tell() { return _stream->tellg(); }
 
-			inline istream_t& seek_abs(pos_type a_pos) { if (!_stream.seekg(a_pos)) throw input_error(); return *this; }	// seek absolute position
-			inline istream_t& seek_beg() { if (!_stream.seekg(_beg)) throw input_error(); return *this; }	// seek to beginning
-			inline istream_t& seek_beg(pos_type a_pos) { if (!_stream.seekg(_beg + a_pos)) throw input_error(); return *this; }	// seek from beginning
-			inline istream_t& seek_rel(off_type a_off) { if (!_stream.seekg(a_off, std::ios_base::cur)) throw input_error(); return *this; }	// seek relative to current position
+			inline istream_t& seek_abs(pos_type a_pos) { _stream->seekg(a_pos); return *this; }	// seek absolute position
+			inline istream_t& seek_beg() { _stream->seekg(_beg); return *this; }	// seek to beginning
+			inline istream_t& seek_beg(pos_type a_pos) { _stream->seekg(_beg + a_pos); return *this; }	// seek from beginning
+			inline istream_t& seek_rel(off_type a_off) { _stream->seekg(a_off, std::ios_base::cur); return *this; }	// seek relative to current position
 
 		private:
-			stream_type& _stream;
+			std::unique_ptr<stream_type> _stream;
 			pos_type _beg;
+		};
+
+
+		// a wrapper that allows files to extract data outside of the initial read in a thread safe manner
+		class mtistream_t
+		{
+		public:
+			class sentry
+			{
+			public:
+				sentry() = delete;
+				sentry(const sentry&) = delete;
+				sentry(sentry&&) = delete;
+
+				sentry(mtistream_t& a_stream) :
+					_impl(a_stream),
+					_locker(a_stream._lock)
+				{}
+
+				~sentry() = default;
+
+				sentry& operator=(const sentry&) = delete;
+				sentry& operator=(sentry&&) = delete;
+
+				[[nodiscard]] constexpr istream_t* get() noexcept { return std::addressof(_impl._stream); }
+				[[nodiscard]] constexpr const istream_t* get() const noexcept { return std::addressof(_impl._stream); }
+
+				[[nodiscard]] constexpr istream_t& operator*() noexcept { return *get(); }
+				[[nodiscard]] constexpr const istream_t& operator*() const noexcept { return *get(); }
+
+				[[nodiscard]] constexpr istream_t* operator->() noexcept { return get(); }
+				[[nodiscard]] constexpr const istream_t* operator->() const noexcept { return get(); }
+
+			private:
+				mtistream_t& _impl;
+				std::unique_lock<std::mutex> _locker;
+			};
+
+			mtistream_t() = delete;
+			mtistream_t(const mtistream_t&) = delete;
+			mtistream_t(mtistream_t&&) = delete;
+
+			mtistream_t(const istream_t&) = delete;
+
+			inline mtistream_t(istream_t&& a_stream) :
+				_stream(std::move(a_stream)),
+				_lock()
+			{}
+
+			mtistream_t& operator=(const mtistream_t&) = delete;
+			mtistream_t& operator=(mtistream_t&&) = delete;
+
+		private:
+			friend class sentry;
+
+			istream_t _stream;
+			mutable std::mutex _lock;
 		};
 
 
@@ -357,7 +429,6 @@ namespace bsa
 		static constexpr archive_version v256 = 256;
 
 
-		template <bool> class basic_archive;
 		class file;
 		class file_iterator;
 		class hash;
@@ -413,8 +484,8 @@ namespace bsa
 
 				constexpr void set_file_count(std::size_t a_count)
 				{
-					if (a_count > std::numeric_limits<std::uint32_t>::max()) {
-						throw conversion_error();
+					if (a_count > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+						throw size_error();
 					} else {
 						_block.fileCount = static_cast<std::uint32_t>(a_count);
 					}
@@ -422,8 +493,8 @@ namespace bsa
 
 				constexpr void set_hash_offset(std::size_t a_offset)
 				{
-					if (a_offset > std::numeric_limits<std::uint32_t>::max()) {
-						throw conversion_error();
+					if (a_offset > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+						throw size_error();
 					} else {
 						_block.hashOffset = static_cast<std::uint32_t>(a_offset);
 					}
@@ -625,21 +696,40 @@ namespace bsa
 					_hash(),
 					_block(),
 					_name(),
-					_data(std::nullopt)
+					_data(std::nullopt),
+					_mtinput(nullptr)
 				{}
 
 				inline file_t(const file_t& a_rhs) :
 					_hash(a_rhs._hash),
 					_block(a_rhs._block),
 					_name(a_rhs._name),
-					_data(a_rhs._data)
+					_data(a_rhs._data),
+					_mtinput(a_rhs._mtinput)
 				{}
 
 				inline file_t(file_t&& a_rhs) noexcept :
 					_hash(std::move(a_rhs._hash)),
 					_block(std::move(a_rhs._block)),
 					_name(std::move(a_rhs._name)),
-					_data(std::move(a_rhs._data))
+					_data(std::move(a_rhs._data)),
+					_mtinput(std::move(a_rhs._mtinput))
+				{}
+
+				inline file_t(const std::shared_ptr<mtistream_t>& a_mtinput) noexcept :
+					_hash(),
+					_block(),
+					_name(),
+					_data(std::nullopt),
+					_mtinput(a_mtinput)
+				{}
+
+				inline file_t(std::shared_ptr<mtistream_t>&& a_mtinput) noexcept :
+					_hash(),
+					_block(),
+					_name(),
+					_data(std::nullopt),
+					_mtinput(std::move(a_mtinput))
 				{}
 
 				inline file_t& operator=(const file_t& a_rhs)
@@ -649,6 +739,7 @@ namespace bsa
 						_block = a_rhs._block;
 						_name = a_rhs._name;
 						_data = a_rhs._data;
+						_mtinput = a_rhs._mtinput;
 					}
 					return *this;
 				}
@@ -660,6 +751,7 @@ namespace bsa
 						_block = std::move(a_rhs._block);
 						_name = std::move(a_rhs._name);
 						_data = std::move(a_rhs._data);
+						_mtinput = std::move(a_rhs._mtinput);
 					}
 					return *this;
 				}
@@ -681,10 +773,22 @@ namespace bsa
 				[[nodiscard]] inline std::string str() const { return _name; }
 				[[nodiscard]] constexpr const std::string& str_ref() const noexcept { return _name; }
 
+				[[nodiscard]] inline char* get_data() { if (!_data) load_data(); return _data->data(); }
+
+				inline void set_data(const char* a_data, std::size_t a_size)
+				{
+					if (a_size > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+						throw size_error();
+					} else {
+						_block.size = static_cast<std::uint32_t>(a_size);
+						_data.emplace(a_data, a_data + a_size);
+					}
+				}
+
 				constexpr void set_offset(std::size_t a_offset)
 				{
-					if (a_offset > std::numeric_limits<std::uint32_t>::max()) {
-						throw conversion_error();
+					if (a_offset > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+						throw size_error();
 					} else {
 						_block.offset = static_cast<std::uint32_t>(a_offset);
 					}
@@ -693,17 +797,6 @@ namespace bsa
 				inline void read(istream_t& a_input)
 				{
 					_block.read(a_input);
-				}
-
-				inline void read_data(istream_t& a_input)
-				{
-					auto pos = a_input.tell();
-					a_input.seek_rel(static_cast<std::streamoff>(offset()));
-
-					_data.emplace(size(), '\0');
-					a_input.read(_data->data(), static_cast<std::streamsize>(size()));
-
-					a_input.seek_abs(pos);
 				}
 
 				inline void read_hash(istream_t& a_input)
@@ -715,7 +808,7 @@ namespace bsa
 				{
 					char ch;
 					do {
-						a_input->get(ch);
+						a_input.get(ch);
 						_name.push_back(ch);
 					} while (ch != '\0' && a_input);
 					_name.pop_back();
@@ -727,11 +820,8 @@ namespace bsa
 
 				inline void extract(std::ofstream& a_file)
 				{
-					if (!_data) {
-						throw output_error();
-					}
-
-					a_file.write(_data->data(), static_cast<std::streamsize>(_data->size()));
+					auto data = get_data();
+					a_file.write(data, static_cast<std::streamsize>(size()));
 					if (!a_file) {
 						throw output_error();
 					}
@@ -742,13 +832,10 @@ namespace bsa
 					_block.write(a_output);
 				}
 
-				inline void write_data(ostream_t& a_output) const
+				inline void write_data(ostream_t& a_output)
 				{
-					if (!_data) {
-						throw output_error();
-					}
-
-					a_output.write(_data->data(), static_cast<std::streamsize>(_data->size()));
+					auto data = get_data();
+					a_output.write(data, static_cast<std::streamsize>(size()));
 				}
 
 				inline void write_hash(ostream_t& a_output) const
@@ -762,6 +849,8 @@ namespace bsa
 				}
 
 			private:
+				using sentry_t = typename mtistream_t::sentry;
+
 				struct block_t
 				{
 					constexpr block_t() noexcept :
@@ -811,10 +900,27 @@ namespace bsa
 					std::uint32_t offset;
 				};
 
+				inline void load_data()
+				{
+					if (!_mtinput) {
+						throw input_error();
+					}
+					sentry_t sentry(*_mtinput);
+
+					auto pos = sentry->tell();
+					sentry->seek_rel(static_cast<std::streamoff>(offset()));
+
+					_data.emplace(size(), '\0');
+					sentry->read(_data->data(), static_cast<std::streamsize>(size()));
+
+					sentry->seek_abs(pos);
+				}
+
 				hash_t _hash;
 				block_t _block;
 				std::string _name;
 				std::optional<std::vector<char>> _data;
+				std::shared_ptr<mtistream_t> _mtinput;
 			};
 			using file_ptr = std::shared_ptr<file_t>;
 
@@ -970,7 +1076,9 @@ namespace bsa
 			}
 
 			[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
+			[[nodiscard]] inline std::pair<const char*, std::size_t> extract() const { return std::make_pair(_impl->get_data(), _impl->size()); }
 			[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
+			[[nodiscard]] inline void pack(const char* a_data, std::size_t a_size) const { return _impl->set_data(a_data, a_size); }
 			[[nodiscard]] inline std::size_t size() const noexcept { return _impl->size(); }
 			[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
 
@@ -1070,7 +1178,7 @@ namespace bsa
 			}
 
 		protected:
-			template <bool> friend class basic_archive;
+			friend class archive;
 
 			explicit inline file_iterator(const std::vector<detail::file_ptr>& a_files) :
 				_files(std::in_place_t()),
@@ -1096,50 +1204,49 @@ namespace bsa
 		};
 
 
-		template <bool FULL>
-		class basic_archive
+		class archive
 		{
 		public:
 			using iterator = file_iterator;
 			using const_iterator = iterator;
 
-			inline basic_archive() noexcept :
+			inline archive() noexcept :
 				_files(),
 				_header()
 			{}
 
-			inline basic_archive(const basic_archive& a_rhs) :
+			inline archive(const archive& a_rhs) :
 				_files(a_rhs._files),
 				_header(a_rhs._header)
 			{}
 
-			inline basic_archive(basic_archive&& a_rhs) noexcept :
+			inline archive(archive&& a_rhs) noexcept :
 				_files(std::move(a_rhs._files)),
 				_header(std::move(a_rhs._header))
 			{}
 
-			inline basic_archive(const std::filesystem::path& a_path) :
+			inline archive(const std::filesystem::path& a_path) :
 				_files(),
 				_header()
 			{
 				read(a_path);
 			}
 
-			inline basic_archive(std::filesystem::path&& a_path) :
+			inline archive(std::filesystem::path&& a_path) :
 				_files(),
 				_header()
 			{
 				read(std::move(a_path));
 			}
 
-			inline basic_archive(std::istream& a_stream) :
+			inline archive(std::unique_ptr<std::istream>&& a_stream) :
 				_files(),
 				_header()
 			{
-				read(a_stream);
+				read(std::move(a_stream));
 			}
 
-			inline basic_archive& operator=(const basic_archive& a_rhs)
+			inline archive& operator=(const archive& a_rhs)
 			{
 				if (this != std::addressof(a_rhs)) {
 					_files = a_rhs._files;
@@ -1148,7 +1255,7 @@ namespace bsa
 				return *this;
 			}
 
-			inline basic_archive& operator=(basic_archive&& a_rhs) noexcept
+			inline archive& operator=(archive&& a_rhs) noexcept
 			{
 				if (this != std::addressof(a_rhs)) {
 					_files = std::move(a_rhs._files);
@@ -1167,11 +1274,11 @@ namespace bsa
 
 			inline void read(const std::filesystem::path& a_path)
 			{
-				std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
-				if (!file.is_open()) {
+				auto file = std::make_unique<std::ifstream>(a_path, std::ios_base::in | std::ios_base::binary);
+				if (!file->is_open()) {
 					throw input_error();
 				} else {
-					read(file);
+					read(std::move(file));
 				}
 			}
 
@@ -1180,9 +1287,11 @@ namespace bsa
 				read(a_path);
 			}
 
-			inline void read(std::istream& a_input)
+			inline void read(std::unique_ptr<std::istream>&& a_input)
 			{
-				detail::istream_t input(a_input);
+				auto mtinput = std::make_shared<detail::mtistream_t>(std::move(a_input));
+				detail::mtistream_t::sentry sentry(*mtinput);
+				auto& input = *sentry;
 
 				clear();
 
@@ -1194,23 +1303,16 @@ namespace bsa
 					throw version_error();
 				}
 
-				read_initial(input);
+				read_initial(mtinput, input);
 				read_filenames(input);
 				read_hashes(input);
-
-				if constexpr (FULL) {
-					read_data(input);
-				}
+				read_data(input);	// important this happens last
 
 				assert(sanity_check());
 			}
 
 			inline void extract(const std::filesystem::path& a_path)
 			{
-				if constexpr (!FULL) {
-					throw output_error();
-				}
-
 				if (!std::filesystem::exists(a_path)) {
 					throw output_error();
 				}
@@ -1251,10 +1353,6 @@ namespace bsa
 
 			inline void write(std::ostream& a_output)
 			{
-				if constexpr (!FULL) {
-					throw output_error();
-				}
-
 				detail::ostream_t output(a_output);
 
 				auto filesByName = prepare_for_write();
@@ -1296,11 +1394,11 @@ namespace bsa
 				return true;
 			}
 
-			inline void read_initial(detail::istream_t& a_input)
+			inline void read_initial(std::shared_ptr<detail::mtistream_t>& a_mtinput, detail::istream_t& a_input)
 			{
 				_files.reserve(file_count());
 				for (std::size_t i = 0; i < file_count(); ++i) {
-					auto file = std::make_shared<detail::file_t>();
+					auto file = std::make_shared<detail::file_t>(a_mtinput);
 					file->read(a_input);
 					_files.push_back(std::move(file));
 				}
@@ -1338,10 +1436,6 @@ namespace bsa
 				pos += static_cast<std::streamoff>(detail::header_t::block_size());
 				pos += static_cast<std::streamoff>(detail::hash_t::block_size() * file_count());
 				a_input.seek_beg(pos);
-
-				for (auto& file : _files) {
-					file->read_data(a_input);
-				}
 			}
 
 			[[nodiscard]] inline std::vector<detail::file_ptr> prepare_for_write()
@@ -1383,10 +1477,6 @@ namespace bsa
 			std::vector<detail::file_ptr> _files;
 			detail::header_t _header;
 		};
-
-
-		using archive = basic_archive<true>;
-		using archive_view = basic_archive<false>;
 	}
 
 
@@ -1811,7 +1901,7 @@ namespace bsa
 				{
 					char ch;
 					do {
-						a_input->get(ch);
+						a_input.get(ch);
 						_name.push_back(ch);
 					} while (ch != '\0' && a_input);
 					_name.pop_back();
@@ -2758,11 +2848,11 @@ namespace bsa
 				read(std::move(a_path));
 			}
 
-			inline archive(std::istream& a_stream) :
+			inline archive(std::unique_ptr<std::istream>&& a_stream) :
 				_dirs(),
 				_header()
 			{
-				read(a_stream);
+				read(std::move(a_stream));
 			}
 
 			inline archive& operator=(const archive& a_rhs)
@@ -2821,9 +2911,11 @@ namespace bsa
 
 			inline void read(const std::filesystem::path& a_path)
 			{
-				std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
-				if (file.is_open()) {
-					read(file);
+				auto file = std::make_unique<std::ifstream>(a_path, std::ios_base::in | std::ios_base::binary);
+				if (!file->is_open()) {
+					throw input_error();
+				} else {
+					read(std::move(file));
 				}
 			}
 
@@ -2832,9 +2924,9 @@ namespace bsa
 				read(a_path);
 			}
 
-			inline void read(std::istream& a_input)
+			inline void read(std::unique_ptr<std::istream>&& a_input)
 			{
-				detail::istream_t input(a_input);
+				detail::istream_t input(std::move(a_input));
 
 				clear();
 
@@ -4179,11 +4271,11 @@ namespace bsa
 				read(std::move(a_path));
 			}
 
-			inline archive(std::istream& a_stream) :
+			inline archive(std::unique_ptr<std::istream>&& a_stream) :
 				_files(),
 				_header()
 			{
-				read(a_stream);
+				read(std::move(a_stream));
 			}
 
 			inline archive& operator=(const archive& a_rhs)
@@ -4239,9 +4331,11 @@ namespace bsa
 
 			inline void read(const std::filesystem::path& a_path)
 			{
-				std::ifstream file(a_path, std::ios_base::in | std::ios_base::binary);
-				if (file.is_open()) {
-					read(file);
+				auto file = std::make_unique<std::ifstream>(a_path, std::ios_base::in | std::ios_base::binary);
+				if (!file->is_open()) {
+					throw input_error();
+				} else {
+					read(std::move(file));
 				}
 			}
 
@@ -4250,9 +4344,9 @@ namespace bsa
 				read(a_path);
 			}
 
-			inline void read(std::istream& a_input)
+			inline void read(std::unique_ptr<std::istream>&& a_input)
 			{
-				detail::istream_t input(a_input);
+				detail::istream_t input(std::move(a_input));
 
 				clear();
 
