@@ -353,5 +353,8 @@ MigrationBackup/
 .ionide/
 
 # Bethesda archives
-*bsa
-*bsl
+*.bsa
+*.bsl
+*.dds
+*.kf
+*.nif
