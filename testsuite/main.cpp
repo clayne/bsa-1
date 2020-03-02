@@ -210,7 +210,10 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 		std::vector<bsa::tes3::file> files;
 		if (!src.empty()) {
 			files.assign(20, *src.begin());
-			dst.insert(files.begin(), files.end());
+			for (auto& file : files) {
+				dst >> file;
+			}
+			files.front().extract_to("E:\\Repos\\bsa\\mytest");
 		}
 		[[maybe_unused]] bool dummy = true;
 	}

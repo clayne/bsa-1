@@ -872,7 +872,7 @@ namespace bsa
 
 				[[nodiscard]] inline const char* c_str() const noexcept { return _name.c_str(); }
 
-				[[nodiscard]] inline bool empty() const noexcept { return !_data || !_mtinput; }
+				[[nodiscard]] inline bool empty() const noexcept { return !_data && !_mtinput; }
 
 				[[nodiscard]] constexpr hash_t hash() const noexcept { return _hash; }
 				[[nodiscard]] constexpr hash_t& hash_ref() noexcept { return _hash; }
@@ -1186,7 +1186,23 @@ namespace bsa
 			[[nodiscard]] inline bool exists() const noexcept { return static_cast<bool>(_impl); }
 
 			[[nodiscard]] inline const char* c_str() const noexcept { assert(exists()); return _impl->c_str(); }
+
 			[[nodiscard]] inline std::pair<const char*, std::size_t> extract() const { assert(exists()); return std::make_pair(_impl->get_data(), _impl->size()); }
+
+			inline void extract_to(const std::filesystem::path& a_root) const
+			{
+				assert(exists());
+				if (!std::filesystem::exists(a_root)) {
+					throw output_error();
+				}
+
+				auto path = a_root;
+				path /= string();
+				std::filesystem::create_directories(path.parent_path());
+				std::ofstream file(path, std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
+				_impl->extract(file);
+			}
+
 			[[nodiscard]] inline hash hash_value() const noexcept { assert(exists()); return hash(_impl->hash_ref()); }
 
 			inline void pack(const char* a_data, std::size_t a_size) { assert(exists()); _impl->set_data(a_data, a_size); }
@@ -1410,6 +1426,18 @@ namespace bsa
 				return a_archive;
 			}
 
+			friend inline archive& operator>>(archive& a_archive, const file& a_file)
+			{
+				a_archive.insert(a_file);
+				return a_archive;
+			}
+
+			friend inline archive& operator>>(archive& a_archive, file&& a_file)
+			{
+				a_archive.insert(std::move(a_file));
+				return a_archive;
+			}
+
 			friend inline archive& operator>>(archive& a_archive, std::unique_ptr<std::istream>&& a_stream)
 			{
 				a_archive.read(std::move(a_stream));
@@ -1549,11 +1577,11 @@ namespace bsa
 					throw size_error();
 				} else if (!a_file || a_file.file_ptr()->empty()) {
 					throw empty_file();
+				} else if (!contains(a_file)) {
+					_files.push_back(a_file.file_ptr());
+					sort();
+					_header.set_file_count(_files.size());
 				}
-
-				_files.push_back(a_file.file_ptr());
-				sort();
-				_header.set_file_count(_files.size());
 			}
 
 			inline void insert(file&& a_file)
@@ -1562,11 +1590,11 @@ namespace bsa
 					throw size_error();
 				} else if (!a_file || a_file.file_ptr()->empty()) {
 					throw empty_file();
+				} else if (!contains(a_file)) {
+					_files.push_back(a_file.steal_file());
+					sort();
+					_header.set_file_count(_files.size());
 				}
-
-				_files.push_back(a_file.steal_file());
-				sort();
-				_header.set_file_count(_files.size());
 			}
 
 			template <class InputIt>
