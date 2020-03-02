@@ -1469,38 +1469,42 @@ namespace bsa
 
 			inline void insert(const file& a_file)
 			{
+				_header.set_file_count(_files.size() + 1);
 				_files.push_back(a_file.file_ptr());
 				std::sort(_files.begin(), _files.end(), file_sorter());
-				_header.set_file_count(_files.size());
 			}
 
 			inline void insert(file&& a_file)
 			{
+				_header.set_file_count(_files.size() + 1);
 				_files.push_back(a_file.steal_file());
 				std::sort(_files.begin(), _files.end(), file_sorter());
-				_header.set_file_count(_files.size());
 			}
 
 			template <class InputIt>
 			inline void insert(InputIt a_first, InputIt a_last)
 			{
-				while (a_first != a_last) {
-					_files.push_back(static_cast<const file&>(*a_first).file_ptr());
-					++a_first;
+				std::size_t count = 0;
+				for (auto it = a_first; it != a_last; ++it) {
+					++count;
 				}
+				_header.set_file_count(_files.size() + count);
 
+				for (auto it = std::move(a_first); it != a_last; ++it) {
+					_files.push_back(static_cast<const file&>(*a_first).file_ptr());
+				}
 				std::sort(_files.begin(), _files.end(), file_sorter());
-				_header.set_file_count(_files.size());
 			}
 
 			inline void insert(std::initializer_list<file> a_initList)
 			{
+				_header.set_file_count(_files.size() + a_initList.size());
+
 				for (auto& elem : a_initList) {
 					_files.push_back(elem.file_ptr());
 				}
 
 				std::sort(_files.begin(), _files.end(), file_sorter());
-				_header.set_file_count(_files.size());
 			}
 
 		private:
