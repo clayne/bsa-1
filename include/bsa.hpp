@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <initializer_list>
 #include <istream>
 #include <iterator>
 #include <limits>
@@ -429,6 +430,7 @@ namespace bsa
 		static constexpr archive_version v256 = 256;
 
 
+		class archive;
 		class file;
 		class file_iterator;
 		class hash;
@@ -516,7 +518,7 @@ namespace bsa
 				struct block_t
 				{
 					constexpr block_t() noexcept :
-						version(0),
+						version(v256),
 						hashOffset(0),
 						fileCount(0)
 					{}
@@ -606,7 +608,15 @@ namespace bsa
 				[[nodiscard]] friend constexpr bool operator==(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_lhs.numeric() == a_rhs.numeric(); }
 				[[nodiscard]] friend constexpr bool operator!=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs == a_rhs); }
 
-				[[nodiscard]] friend constexpr bool operator<(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_lhs.numeric() < a_rhs.numeric(); }
+				[[nodiscard]] friend constexpr bool operator<(const hash_t& a_lhs, const hash_t& a_rhs) noexcept
+				{
+					if (a_lhs.low() != a_rhs.low()) {
+						return a_lhs.low() < a_rhs.low();
+					} else {
+						return a_lhs.high() < a_rhs.high();
+					}
+				}
+
 				[[nodiscard]] friend constexpr bool operator>(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_rhs < a_lhs; }
 				[[nodiscard]] friend constexpr bool operator<=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
 				[[nodiscard]] friend constexpr bool operator>=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
@@ -689,6 +699,77 @@ namespace bsa
 			using hash_ref = std::reference_wrapper<hash_t>;
 
 
+			class file_hasher
+			{
+			public:
+				file_hasher() = default;
+				file_hasher(const file_hasher&) = default;
+				file_hasher(file_hasher&&) = default;
+
+				file_hasher& operator=(const file_hasher&) = default;
+				file_hasher& operator=(file_hasher&&) = default;
+
+				[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
+				{
+					for (auto& ch : a_path) {
+						if (ch < 0) {
+							throw hash_error();
+						}
+					}
+
+					auto fullPath = normalize(a_path);
+					return hash(fullPath);
+				}
+
+			private:
+				[[nodiscard]] constexpr hash_t hash(std::string_view a_fullPath) const
+				{
+					hash_t hash;
+					auto& block = hash.block_ref();
+
+					std::size_t midPoint = a_fullPath.size() >> 1;
+					std::size_t i = 0;
+					while (i < midPoint) {
+						// rotate between first 4 bytes
+						block.lo ^= static_cast<std::uint32_t>(a_fullPath[i]) << ((i % 4) * 8);
+						++i;
+					}
+
+					while (i < a_fullPath.length()) {
+						// rotate between first 4 bytes
+						auto rot = static_cast<std::uint32_t>(a_fullPath[i]) << (((i - midPoint) % 4) * 8);
+						block.hi = rotr(block.hi ^ rot, static_cast<int>(rot));
+						++i;
+					}
+
+					return hash;
+				}
+
+				[[nodiscard]] inline std::string normalize(std::string_view a_path) const
+				{
+					std::filesystem::path path(a_path);
+					path = path.lexically_normal();
+
+					std::string fullPath = path.string();
+					for (auto& ch : fullPath) {
+						ch = mapchar(ch);
+					}
+					while (!fullPath.empty() && fullPath.back() == '\\') {
+						fullPath.pop_back();
+					}
+					while (!fullPath.empty() && fullPath.front() == '\\') {
+						fullPath = fullPath.substr(1);
+					}
+
+					if (fullPath.empty()) {
+						throw hash_empty();
+					}
+
+					return fullPath;
+				}
+			};
+
+
 			class file_t
 			{
 			public:
@@ -732,6 +813,14 @@ namespace bsa
 					_mtinput(std::move(a_mtinput))
 				{}
 
+				inline file_t(std::string_view a_relativePath) :
+					_hash(file_hasher()(std::move(a_relativePath))),
+					_block(),
+					_name(a_relativePath),
+					_data(std::nullopt),
+					_mtinput(nullptr)
+				{}
+
 				inline file_t& operator=(const file_t& a_rhs)
 				{
 					if (this != std::addressof(a_rhs)) {
@@ -755,6 +844,14 @@ namespace bsa
 					}
 					return *this;
 				}
+
+				[[nodiscard]] friend constexpr bool operator==(const file_t& a_lhs, const file_t& a_rhs) { return a_lhs.hash_ref() == a_rhs.hash_ref(); }
+				[[nodiscard]] friend constexpr bool operator!=(const file_t& a_lhs, const file_t& a_rhs) { return !(a_lhs == a_rhs); }
+
+				[[nodiscard]] friend constexpr bool operator<(const file_t& a_lhs, const file_t& a_rhs) noexcept { return a_lhs.hash_ref() < a_rhs.hash_ref(); }
+				[[nodiscard]] friend constexpr bool operator>(const file_t& a_lhs, const file_t& a_rhs) noexcept { return a_rhs < a_lhs; }
+				[[nodiscard]] friend constexpr bool operator<=(const file_t& a_lhs, const file_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
+				[[nodiscard]] friend constexpr bool operator>=(const file_t& a_lhs, const file_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
 
 				[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t); }
 
@@ -782,6 +879,27 @@ namespace bsa
 					} else {
 						_block.size = static_cast<std::uint32_t>(a_size);
 						_data.emplace(a_data, a_data + a_size);
+					}
+				}
+
+				inline void set_data(std::istream& a_input)
+				{
+					_data.emplace();
+					while (a_input) {
+						_data->push_back(static_cast<char>(a_input.get()));
+					}
+					if (!_data->empty()) {
+						_data->pop_back();	// discard eof
+					}
+
+					if (_data->size() == 0) {
+						_data.reset();
+						throw size_error();
+					} else if (_data->size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+						_data.reset();
+						throw size_error();
+					} else {
+						_block.size = static_cast<std::uint32_t>(_data->size());
 					}
 				}
 
@@ -923,77 +1041,6 @@ namespace bsa
 				std::shared_ptr<mtistream_t> _mtinput;
 			};
 			using file_ptr = std::shared_ptr<file_t>;
-
-
-			class file_hasher
-			{
-			public:
-				file_hasher() = default;
-				file_hasher(const file_hasher&) = default;
-				file_hasher(file_hasher&&) = default;
-
-				file_hasher& operator=(const file_hasher&) = default;
-				file_hasher& operator=(file_hasher&&) = default;
-
-				[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
-				{
-					for (auto& ch : a_path) {
-						if (ch < 0) {
-							throw hash_error();
-						}
-					}
-
-					auto fullPath = normalize(a_path);
-					return hash(fullPath);
-				}
-
-			private:
-				[[nodiscard]] constexpr hash_t hash(std::string_view a_fullPath) const
-				{
-					hash_t hash;
-					auto& block = hash.block_ref();
-
-					std::size_t midPoint = a_fullPath.size() >> 1;
-					std::size_t i = 0;
-					while (i < midPoint) {
-						// rotate between first 4 bytes
-						block.lo ^= static_cast<std::uint32_t>(a_fullPath[i]) << ((i % 4) * 8);
-						++i;
-					}
-
-					while (i < a_fullPath.length()) {
-						// rotate between first 4 bytes
-						auto rot = static_cast<std::uint32_t>(a_fullPath[i]) << (((i - midPoint) % 4) * 8);
-						block.hi = rotr(block.hi ^ rot, static_cast<int>(rot));
-						++i;
-					}
-
-					return hash;
-				}
-
-				[[nodiscard]] inline std::string normalize(std::string_view a_path) const
-				{
-					std::filesystem::path path(a_path);
-					path = path.lexically_normal();
-
-					std::string fullPath = path.string();
-					for (auto& ch : fullPath) {
-						ch = mapchar(ch);
-					}
-					while (!fullPath.empty() && fullPath.back() == '\\') {
-						fullPath.pop_back();
-					}
-					while (!fullPath.empty() && fullPath.front() == '\\') {
-						fullPath = fullPath.substr(1);
-					}
-
-					if (fullPath.empty()) {
-						throw hash_empty();
-					}
-
-					return fullPath;
-				}
-			};
 		}
 
 
@@ -1049,7 +1096,9 @@ namespace bsa
 		class file
 		{
 		public:
-			file() = delete;
+			inline file() noexcept :
+				_impl(nullptr)
+			{}
 
 			inline file(const file& a_rhs) noexcept :
 				_impl(a_rhs._impl)
@@ -1058,6 +1107,19 @@ namespace bsa
 			inline file(file&& a_rhs) noexcept :
 				_impl(std::move(a_rhs._impl))
 			{}
+
+			inline file(std::string_view a_relativePath, std::filesystem::path a_filePath) :
+				_impl(nullptr)
+			{
+				_impl.reset(new detail::file_t(a_relativePath));
+				open_and_pack(a_filePath);
+			}
+
+			inline file(std::string_view a_relativePath, std::istream& a_stream) :
+				_impl(new detail::file_t(a_relativePath))
+			{
+				_impl->set_data(a_stream);
+			}
 
 			inline file& operator=(const file& a_rhs) noexcept
 			{
@@ -1078,11 +1140,16 @@ namespace bsa
 			[[nodiscard]] inline const char* c_str() const noexcept { return _impl->c_str(); }
 			[[nodiscard]] inline std::pair<const char*, std::size_t> extract() const { return std::make_pair(_impl->get_data(), _impl->size()); }
 			[[nodiscard]] inline hash hash_value() const noexcept { return hash(_impl->hash_ref()); }
-			[[nodiscard]] inline void pack(const char* a_data, std::size_t a_size) const { return _impl->set_data(a_data, a_size); }
+
+			inline void pack(const char* a_data, std::size_t a_size) { _impl->set_data(a_data, a_size); }
+			inline void pack(std::filesystem::path a_path) { open_and_pack(a_path); }
+			inline void pack(std::istream& a_stream) { _impl->set_data(a_stream); }
+
 			[[nodiscard]] inline std::size_t size() const noexcept { return _impl->size(); }
 			[[nodiscard]] inline const std::string& string() const noexcept { return _impl->str_ref(); }
 
 		protected:
+			friend class archive;
 			friend class file_iterator;
 
 			using value_type = detail::file_ptr;
@@ -1095,9 +1162,28 @@ namespace bsa
 				_impl(std::move(a_rhs))
 			{}
 
+			[[nodiscard]] constexpr value_type& file_ptr() noexcept { return _impl; }
+			[[nodiscard]] constexpr const value_type& file_ptr() const noexcept { return _impl; }
+
+			[[nodiscard]] inline value_type&& steal_file() noexcept { return std::move(_impl); }
+
 		private:
+			inline void open_and_pack(const std::filesystem::path& a_path)
+			{
+				std::ifstream input(a_path, std::ios_base::in | std::ios_base::binary);
+				input.exceptions(std::ios_base::badbit);
+				_impl->set_data(input);
+			}
+
 			value_type _impl;
 		};
+
+
+		template <class... Args, typename std::enable_if_t<std::is_constructible_v<file, Args...>, int> = 0>
+		file make_file(Args... a_args) noexcept(std::is_nothrow_constructible_v<file, Args...>)
+		{
+			return file(std::forward<Args>(a_args)...);
+		}
 
 
 		class file_iterator
@@ -1381,7 +1467,51 @@ namespace bsa
 				}
 			}
 
+			inline void insert(const file& a_file)
+			{
+				_files.push_back(a_file.file_ptr());
+				std::sort(_files.begin(), _files.end(), file_sorter());
+				_header.set_file_count(_files.size());
+			}
+
+			inline void insert(file&& a_file)
+			{
+				_files.push_back(a_file.steal_file());
+				std::sort(_files.begin(), _files.end(), file_sorter());
+				_header.set_file_count(_files.size());
+			}
+
+			template <class InputIt>
+			inline void insert(InputIt a_first, InputIt a_last)
+			{
+				while (a_first != a_last) {
+					_files.push_back(static_cast<const file&>(*a_first).file_ptr());
+					++a_first;
+				}
+
+				std::sort(_files.begin(), _files.end(), file_sorter());
+				_header.set_file_count(_files.size());
+			}
+
+			inline void insert(std::initializer_list<file> a_initList)
+			{
+				for (auto& elem : a_initList) {
+					_files.push_back(elem.file_ptr());
+				}
+
+				std::sort(_files.begin(), _files.end(), file_sorter());
+				_header.set_file_count(_files.size());
+			}
+
 		private:
+			struct file_sorter
+			{
+				[[nodiscard]] bool operator()(const detail::file_ptr& a_lhs, const detail::file_ptr& a_rhs) const
+				{
+					return *a_lhs < *a_rhs;
+				}
+			};
+
 			inline bool sanity_check()
 			{
 				for (auto& file : _files) {
@@ -1451,7 +1581,7 @@ namespace bsa
 					namesSize += file->name_size();
 				}
 
-				std::size_t hashOffset = (detail::file_t::block_size() + 4) * file_count();
+				std::size_t hashOffset = (detail::file_t::block_size() + 4) * _files.size();
 				hashOffset += namesSize;
 				_header.set_hash_offset(hashOffset);
 				_header.set_file_count(_files.size());
