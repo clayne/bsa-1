@@ -7,23 +7,30 @@
 #include "bsa.hpp"
 
 
-class StopWatch
+class stopwatch
 {
+private:
+	template <class> struct is_duration : std::false_type {};
+	template <class Rep, class Period> struct is_duration<std::chrono::duration<Rep, Period>> : std::true_type {};
+
 public:
 	void start()
 	{
-		_start = std::chrono::high_resolution_clock::now();
+		_start = clock_t::now();
 	}
 
-	void time_stamp()
+	template <class Duration, std::enable_if_t<is_duration<Duration>::value, int> = 0>
+	void stamp()
 	{
-		auto end = std::chrono::high_resolution_clock::now();
-		std::chrono::duration<double> diff = end - _start;
-		std::cout << "Milestone: " << diff.count() << '\n';
+		auto end = clock_t::now();
+		auto diff = std::chrono::duration_cast<Duration>(end - _start);
+		std::cout << "Stamp: " << diff.count() << '\n';
 	}
 
 private:
-	std::chrono::time_point<std::chrono::high_resolution_clock> _start;
+	using clock_t = std::chrono::high_resolution_clock;
+
+	std::chrono::time_point<clock_t> _start;
 };
 
 
@@ -90,7 +97,7 @@ void repack_tes3()
 
 	archive.insert(files.begin(), files.end());
 	archive << "E:\\Repos\\bsa\\mytest.bsa";
-	compare_tes3("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa", "E:\\Repos\\bsa\\mytest.bsa");
+	//compare_tes3("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa", "E:\\Repos\\bsa\\mytest.bsa");
 }
 
 
@@ -192,7 +199,7 @@ void parse_fo4()
 
 int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 {
-	StopWatch watch;
+	stopwatch watch;
 	watch.start();
 
 	//extract_tes3();
@@ -204,21 +211,29 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 
 	//parse_fo4();
 
+#if 1
 	{
 		bsa::tes3::archive src("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
 		bsa::tes3::archive dst;
 		std::vector<bsa::tes3::file> files;
 		if (!src.empty()) {
-			files.assign(20, src.front());
+			for (auto& file : src) {
+				files.push_back(file);
+			}
+
+			//files.assign(20, src.front());
+			dst.insert(files.begin(), files.end());
 			for (auto& file : files) {
 				dst >> file;
 			}
+			dst.erase(files.front());
 			//files.front().extract_to("E:\\Repos\\bsa\\mytest");
 		}
 		[[maybe_unused]] bool dummy = true;
 	}
+#endif
 
-	watch.time_stamp();
+	watch.stamp<std::chrono::milliseconds>();
 
 	return EXIT_SUCCESS;
 }

@@ -147,6 +147,10 @@ namespace bsa
 
 	namespace detail
 	{
+		static constexpr auto max_int32 = static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max());
+		static constexpr auto max_uint32 = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max());
+
+
 		template <class T, typename std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
 		[[nodiscard]] constexpr T rotl(T a_val, int a_pos) noexcept;
 		template <class T, typename std::enable_if_t<std::is_unsigned_v<T>, int> = 0>
@@ -259,6 +263,100 @@ namespace bsa
 		}
 
 
+		class path_t
+		{
+		public:
+			using value_type = std::string;
+			using iterator = typename value_type::iterator;
+			using const_iterator = typename value_type::const_iterator;
+			using reverse_iterator = typename value_type::reverse_iterator;
+			using const_reverse_iterator = typename value_type::const_reverse_iterator;
+
+			inline path_t() noexcept :
+				_impl()
+			{}
+
+			inline path_t(const path_t& a_rhs) :
+				_impl(a_rhs._impl)
+			{}
+
+			inline path_t(path_t&& a_rhs) noexcept :
+				_impl(std::move(a_rhs._impl))
+			{}
+
+			inline path_t(std::string_view a_path) :
+				_impl()
+			{
+				normalize(a_path);
+			}
+
+			inline path_t& operator=(const path_t& a_rhs)
+			{
+				if (this != std::addressof(a_rhs)) {
+					_impl = a_rhs._impl;
+				}
+				return *this;
+			}
+
+			inline path_t& operator=(path_t&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_impl = std::move(a_rhs._impl);
+				}
+				return *this;
+			}
+
+			inline path_t& operator=(std::string_view a_path)
+			{
+				normalize(a_path);
+				return *this;
+			}
+
+			[[nodiscard]] inline iterator begin() noexcept { return _impl.begin(); }
+			[[nodiscard]] inline const_iterator begin() const noexcept { return _impl.begin(); }
+			[[nodiscard]] inline const_iterator cbegin() const noexcept { return _impl.cbegin(); }
+
+			[[nodiscard]] inline iterator end() noexcept { return _impl.end(); }
+			[[nodiscard]] inline const_iterator end() const noexcept { return _impl.end(); }
+			[[nodiscard]] inline const_iterator cend() const noexcept { return _impl.cend(); }
+
+			[[nodiscard]] inline reverse_iterator rbegin() noexcept { return _impl.rbegin(); }
+			[[nodiscard]] inline const_reverse_iterator rbegin() const noexcept { return _impl.rbegin(); }
+			[[nodiscard]] inline const_reverse_iterator crbegin() const noexcept { return _impl.crbegin(); }
+
+			[[nodiscard]] inline reverse_iterator rend() noexcept { return _impl.rend(); }
+			[[nodiscard]] inline const_reverse_iterator rend() const noexcept { return _impl.rend(); }
+			[[nodiscard]] inline const_reverse_iterator crend() const noexcept { return _impl.crend(); }
+
+			[[nodiscard]] inline bool empty() const noexcept { return _impl.empty(); }
+
+			[[nodiscard]] inline const char* c_str() const noexcept { return _impl.c_str(); }
+			[[nodiscard]] inline std::string string() const { return _impl; }
+			[[nodiscard]] inline std::string_view string_view() const noexcept { return static_cast<std::string_view>(_impl); }
+
+		private:
+			inline void normalize(std::string_view a_path)
+			{
+				std::filesystem::path p(a_path);
+				_impl = p.lexically_normal().string();
+
+				for (auto& ch : _impl) {
+					ch = mapchar(ch);
+				}
+
+				if (!_impl.empty() && _impl.back() == '\\') {
+					_impl.pop_back();
+				}
+
+				if (!_impl.empty() && _impl.front() == '\\') {
+					_impl = _impl.substr(1);
+				}
+			}
+
+			value_type _impl;
+		};
+
+
 		class istream_t
 		{
 		public:
@@ -289,7 +387,7 @@ namespace bsa
 					throw input_error();
 				} else {
 					_beg = _stream->tellg();
-					_stream->exceptions(std::ios_base::badbit | std::ios_base::failbit | std::ios_base::failbit);
+					_stream->exceptions(std::ios_base::badbit | std::ios_base::failbit);
 				}
 			}
 
@@ -496,21 +594,16 @@ namespace bsa
 
 				constexpr void set_file_count(std::size_t a_count)
 				{
-					if (a_count > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+					if (a_count > max_int32) {
 						throw size_error();
 					} else {
 						_block.fileCount = static_cast<std::uint32_t>(a_count);
 					}
 				}
 
-				[[nodiscard]] constexpr bool can_set_file_count(std::size_t a_count) const noexcept
-				{
-					return a_count <= static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max());
-				}
-
 				constexpr void set_hash_offset(std::size_t a_offset)
 				{
-					if (a_offset > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+					if (a_offset > max_int32) {
 						throw size_error();
 					} else {
 						_block.hashOffset = static_cast<std::uint32_t>(a_offset);
@@ -717,23 +810,28 @@ namespace bsa
 			class file_hasher
 			{
 			public:
-				file_hasher() = default;
-				file_hasher(const file_hasher&) = default;
-				file_hasher(file_hasher&&) = default;
+				file_hasher() noexcept = default;
+				file_hasher(const file_hasher&) noexcept = default;
+				file_hasher(file_hasher&&) noexcept = default;
 
-				file_hasher& operator=(const file_hasher&) = default;
-				file_hasher& operator=(file_hasher&&) = default;
+				~file_hasher() noexcept = default;
+
+				file_hasher& operator=(const file_hasher&) noexcept = default;
+				file_hasher& operator=(file_hasher&&) noexcept = default;
 
 				[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
 				{
-					for (auto& ch : a_path) {
-						if (ch < 0) {
-							throw hash_error();
-						}
-					}
+					path_t path(a_path);
+					auto view = path.string_view();
+					verify(view);
+					return hash(view);
+				}
 
-					auto fullPath = normalize(a_path);
-					return hash(fullPath);
+				[[nodiscard]] inline hash_t operator()(const path_t& a_path) const
+				{
+					auto view = a_path.string_view();
+					verify(view);
+					return hash(view);
 				}
 
 			private:
@@ -760,27 +858,17 @@ namespace bsa
 					return hash;
 				}
 
-				[[nodiscard]] inline std::string normalize(std::string_view a_path) const
+				inline void verify(std::string_view a_path) const
 				{
-					std::filesystem::path path(a_path);
-					path = path.lexically_normal();
-
-					std::string fullPath = path.string();
-					for (auto& ch : fullPath) {
-						ch = mapchar(ch);
-					}
-					while (!fullPath.empty() && fullPath.back() == '\\') {
-						fullPath.pop_back();
-					}
-					while (!fullPath.empty() && fullPath.front() == '\\') {
-						fullPath = fullPath.substr(1);
+					if (a_path.empty()) {
+						throw empty_file();
 					}
 
-					if (fullPath.empty()) {
-						throw hash_empty();
+					for (auto& ch : a_path) {
+						if (ch < 0) {
+							throw hash_non_ascii();
+						}
 					}
-
-					return fullPath;
 				}
 			};
 
@@ -829,12 +917,16 @@ namespace bsa
 				{}
 
 				inline file_t(std::string_view a_relativePath) :
-					_hash(file_hasher()(std::move(a_relativePath))),
+					_hash(),
 					_block(),
-					_name(a_relativePath),
+					_name(),
 					_data(std::nullopt),
 					_mtinput(nullptr)
-				{}
+				{
+					path_t path(a_relativePath);
+					_hash = file_hasher()(path);
+					_name = path.string();
+				}
 
 				inline file_t& operator=(const file_t& a_rhs)
 				{
@@ -887,11 +979,11 @@ namespace bsa
 				[[nodiscard]] inline std::string str() const { return _name; }
 				[[nodiscard]] constexpr const std::string& str_ref() const noexcept { return _name; }
 
-				[[nodiscard]] inline char* get_data() { if (!_data) load_data(); return _data->data(); }
+				[[nodiscard]] inline std::vector<char> get_data() { return _data ? *_data : load_data(); }
 
 				inline void set_data(const char* a_data, std::size_t a_size)
 				{
-					if (a_size > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+					if (a_size > max_int32) {
 						throw size_error();
 					} else {
 						_block.size = static_cast<std::uint32_t>(a_size);
@@ -912,7 +1004,7 @@ namespace bsa
 					if (_data->size() == 0) {
 						_data.reset();
 						throw size_error();
-					} else if (_data->size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+					} else if (_data->size() > max_int32) {
 						_data.reset();
 						throw size_error();
 					} else {
@@ -922,7 +1014,7 @@ namespace bsa
 
 				constexpr void set_offset(std::size_t a_offset)
 				{
-					if (a_offset > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())) {
+					if (a_offset > max_int32) {
 						throw size_error();
 					} else {
 						_block.offset = static_cast<std::uint32_t>(a_offset);
@@ -955,8 +1047,14 @@ namespace bsa
 
 				inline void extract(std::ofstream& a_file)
 				{
-					auto data = get_data();
-					a_file.write(data, static_cast<std::streamsize>(size()));
+					auto ssize = static_cast<std::streamsize>(size());
+					if (_data) {
+						a_file.write(_data->data(), ssize);
+					} else {
+						auto data = load_data();
+						a_file.write(data.data(), ssize);
+					}
+
 					if (!a_file) {
 						throw output_error();
 					}
@@ -969,8 +1067,13 @@ namespace bsa
 
 				inline void write_data(ostream_t& a_output)
 				{
-					auto data = get_data();
-					a_output.write(data, static_cast<std::streamsize>(size()));
+					auto ssize = static_cast<std::streamsize>(size());
+					if (_data) {
+						a_output.write(_data->data(), ssize);
+					} else {
+						auto data = load_data();
+						a_output.write(data.data(), ssize);
+					}
 				}
 
 				inline void write_hash(ostream_t& a_output) const
@@ -1035,7 +1138,7 @@ namespace bsa
 					std::uint32_t offset;
 				};
 
-				inline void load_data()
+				inline std::vector<char> load_data()
 				{
 					if (!_mtinput) {
 						throw input_error();
@@ -1045,10 +1148,11 @@ namespace bsa
 					auto pos = sentry->tell();
 					sentry->seek_rel(static_cast<std::streamoff>(offset()));
 
-					_data.emplace(size(), '\0');
-					sentry->read(_data->data(), static_cast<std::streamsize>(size()));
+					std::vector<char> data(size(), '\0');
+					sentry->read(data.data(), static_cast<std::streamsize>(size()));
 
 					sentry->seek_abs(pos);
+					return data;
 				}
 
 				hash_t _hash;
@@ -1187,7 +1291,9 @@ namespace bsa
 
 			[[nodiscard]] inline const char* c_str() const noexcept { assert(exists()); return _impl->c_str(); }
 
-			[[nodiscard]] inline std::pair<const char*, std::size_t> extract() const { assert(exists()); return std::make_pair(_impl->get_data(), _impl->size()); }
+			[[nodiscard]] inline bool empty() const { assert(exists()); return _impl->empty(); }
+
+			[[nodiscard]] inline std::vector<char> extract() const { assert(exists()); return _impl->get_data(); }
 
 			inline void extract_to(const std::filesystem::path& a_root) const
 			{
@@ -1200,6 +1306,10 @@ namespace bsa
 				path /= string();
 				std::filesystem::create_directories(path.parent_path());
 				std::ofstream file(path, std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
+				if (!file.is_open()) {
+					throw output_error();
+				}
+
 				_impl->extract(file);
 			}
 
@@ -1468,12 +1578,12 @@ namespace bsa
 			[[nodiscard]] inline iterator begin() const { return iterator(_files.begin(), _files.end()); }
 			[[nodiscard]] inline iterator end() const noexcept { return iterator(); }
 
-			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return _header.file_count(); }
-			[[nodiscard]] constexpr archive_version version() const noexcept { return _header.version(); }
-
 			[[nodiscard]] constexpr std::size_t size() const noexcept { return file_count(); }
 			[[nodiscard]] constexpr bool empty() const noexcept { return size() == 0; }
 			inline void clear() noexcept { _files.clear(); _header.clear(); }
+
+			[[nodiscard]] constexpr std::size_t file_count() const noexcept { return _header.file_count(); }
+			[[nodiscard]] constexpr archive_version version() const noexcept { return _header.version(); }
 
 			inline void read(const std::filesystem::path& a_path)
 			{
@@ -1510,6 +1620,8 @@ namespace bsa
 				read_filenames(input);
 				read_hashes(input);
 				read_data(input);	// important this happens last
+
+				sort();
 
 				assert(sanity_check());
 			}
@@ -1548,7 +1660,7 @@ namespace bsa
 			{
 				detail::ostream_t output(a_output);
 
-				auto filesByName = prepare_for_write();
+				prepare_for_write();
 
 				_header.write(output);
 				for (auto& file : _files) {
@@ -1569,66 +1681,71 @@ namespace bsa
 					file->write_hash(output);
 				}
 
-				for (auto& file : filesByName) {
+				for (auto& file : _filesByName) {
 					file->write_data(output);
 				}
 			}
 
 			inline void insert(const file& a_file)
 			{
-				if (!_header.can_set_file_count(_files.size() + 1)) {
+				if (!can_insert(a_file.file_ptr())) {
 					throw size_error();
-				} else if (!a_file || a_file.file_ptr()->empty()) {
+				} else if (!a_file || a_file.empty()) {
 					throw empty_file();
 				} else if (!contains(a_file)) {
-					_files.push_back(a_file.file_ptr());
+					reserve(size() + 1);
+					push_back(a_file.file_ptr());
 					sort();
-					_header.set_file_count(_files.size());
+					update_size();
 				}
 			}
 
 			inline void insert(file&& a_file)
 			{
-				if (!_header.can_set_file_count(_files.size() + 1)) {
+				if (!can_insert(a_file.file_ptr())) {
 					throw size_error();
-				} else if (!a_file || a_file.file_ptr()->empty()) {
+				} else if (!a_file || a_file.empty()) {
 					throw empty_file();
 				} else if (!contains(a_file)) {
-					_files.push_back(a_file.steal_file());
+					reserve(size() + 1);
+					push_back(a_file.steal_file());
 					sort();
-					_header.set_file_count(_files.size());
+					update_size();
 				}
 			}
 
 			template <class InputIt>
 			inline void insert(InputIt a_first, InputIt a_last)
 			{
-				if (!_header.can_set_file_count(_files.size() + std::distance(a_first, a_last))) {
-					throw size_error();
-				}
-
-				std::vector<std::reference_wrapper<const file>> toInsert;
+				container_t toInsert;
 				while (a_first != a_last) {
 					auto& f = static_cast<const file&>(*a_first);
-					if (!f || f.file_ptr()->empty()) {
+					if (!f || f.empty()) {
 						throw empty_file();
 					} else if (!contains(f)) {
-						toInsert.push_back(f);
+						toInsert.push_back(f.file_ptr());
 					}
 					++a_first;
 				}
 
-				std::sort(toInsert.begin(), toInsert.end());
-				auto newEnd = std::unique(toInsert.begin(), toInsert.end());
+				std::sort(toInsert.begin(), toInsert.end(), file_sorter());
+				auto newEnd = std::unique(toInsert.begin(), toInsert.end(), [](const value_t& a_lhs, const value_t& a_rhs) -> bool
+				{
+					return a_lhs->hash_ref() == a_rhs->hash_ref();
+				});
 				toInsert.erase(newEnd, toInsert.end());
 
+				if (!can_insert(toInsert)) {
+					throw size_error();
+				}
+
+				reserve(size() + toInsert.size());
 				for (auto& elem : toInsert) {
-					auto& f = elem.get();
-					_files.push_back(f.file_ptr());
+					push_back(elem);
 				}
 
 				sort();
-				_header.set_file_count(_files.size());
+				update_size();
 			}
 
 			inline void insert(std::initializer_list<file> a_initList)
@@ -1642,8 +1759,8 @@ namespace bsa
 					return false;
 				}
 
-				file_finder finder(a_file.file_ptr()->hash());
-				auto it = std::find_if(_files.begin(), _files.end(), std::move(finder));
+				auto hash = a_file.file_ptr()->hash();
+				auto it = binary_find(hash);
 				if (it == _files.end()) {
 					return false;
 				}
@@ -1666,7 +1783,8 @@ namespace bsa
 
 			[[nodiscard]] inline file find(const std::string_view& a_path)
 			{
-				auto it = std::find_if(_files.begin(), _files.end(), file_finder(a_path));
+				auto hash = detail::file_hasher()(a_path);
+				auto it = binary_find(hash);
 				return it != _files.end() ? file(*it) : file();
 			}
 
@@ -1681,67 +1799,243 @@ namespace bsa
 				if (!a_file) {
 					return false;
 				} else {
-					file_finder finder(a_file.file_ptr()->hash());
-					auto it = std::find_if(_files.begin(), _files.end(), std::move(finder));
+					auto hash = a_file.file_ptr()->hash();
+					auto it = binary_find(hash);
 					return it != _files.end();
 				}
 			}
 
 		private:
+			using value_t = detail::file_ptr;
+			using container_t = std::vector<value_t>;
+			using iterator_t = typename container_t::iterator;
+
 			class file_sorter
 			{
 			public:
-				[[nodiscard]] bool operator()(const detail::file_ptr& a_lhs, const detail::file_ptr& a_rhs) const
+				[[nodiscard]] inline bool operator()(const value_t& a_lhs, const value_t& a_rhs) const
 				{
-					return *a_lhs < *a_rhs;
+					return a_lhs->hash_ref() < a_rhs->hash_ref();
+				}
+
+				[[nodiscard]] inline bool operator()(const value_t& a_lhs, const detail::hash_t& a_rhs) const
+				{
+					return a_lhs->hash_ref() < a_rhs;
 				}
 			};
 
-			class file_finder
+			class file_name_sorter
 			{
 			public:
-				inline file_finder(const std::string_view& a_path) :
-					file_finder(detail::file_hasher()(a_path))
-				{}
-
-				inline file_finder(detail::hash_t a_hash) :
-					_hash(std::move(a_hash))
-				{}
-
-				[[nodiscard]] bool operator()(const detail::file_ptr& a_val) const
+				[[nodiscard]] inline bool operator()(const value_t& a_lhs, const value_t& a_rhs) const
 				{
-					return _hash == a_val->hash_ref();
+					return a_lhs->str_ref() < a_rhs->str_ref();
 				}
-
-			private:
-				detail::hash_t _hash;
 			};
 
-			inline void sort()
+			inline iterator_t binary_find(const detail::hash_t& a_hash)
 			{
-				std::sort(_files.begin(), _files.end(), file_sorter());
+				auto it = _files.begin();
+				auto itEnd = _files.end();
+				it = std::lower_bound(it, itEnd, a_hash, file_sorter());
+
+				return it != _files.end() && (*it)->hash_ref() == a_hash ? it : itEnd;
 			}
 
-			inline bool sanity_check()
+			[[nodiscard]] inline bool can_insert(const value_t& a_file)
 			{
-				for (auto& file : _files) {
-					auto hash = detail::file_hasher()(file->str_ref());
-					if (hash != file->hash_ref()) {
-						assert(false);
+				if (size() + 1 > detail::max_int32 ||
+					!validate_hash_offsets(a_file) ||
+					!validate_name_offsets(a_file) ||
+					!validate_data_offsets(a_file)) {
+					return false;
+				} else {
+					return true;
+				}
+			}
+
+			[[nodiscard]] inline bool can_insert(const container_t& a_files)
+			{
+				if (size() + a_files.size() > detail::max_int32) {
+					return false;
+				}
+
+				container_t merge;
+				std::merge(_files.begin(), _files.end(), a_files.begin(), a_files.end(), std::back_inserter(merge), file_sorter());
+				if (!validate_hash_offsets(merge) || !validate_name_offsets(merge)) {
+					return false;
+				}
+
+				std::sort(merge.begin(), merge.end(), file_name_sorter());
+				if (!validate_data_offsets(merge)) {
+					return false;
+				}
+
+				return true;
+			}
+
+			// std::function<std::size_t(const value_t&)>
+			template <class Sorter, class UnaryFunctor>
+			[[nodiscard]] inline bool validate_offsets(const container_t& a_files, const value_t& a_file, Sorter a_sorter, UnaryFunctor a_func)
+			{
+				auto lower = std::lower_bound(a_files.begin(), a_files.end(), a_file, a_sorter);
+				std::size_t offset = 0;
+
+				for (auto it = a_files.begin(); it != lower; ++it) {
+					offset += a_func(*it);
+				}
+
+				if (lower != a_files.end()) {
+					offset += a_func(a_file);
+					if (offset > detail::max_int32) {
+						return false;
+					}
+
+					for (auto it = lower; it != a_files.end(); ++it) {
+						offset += a_func(*it);
+						if (offset > detail::max_int32) {
+							return false;
+						}
 					}
 				}
 
 				return true;
 			}
 
-			inline void read_initial(std::shared_ptr<detail::mtistream_t>& a_mtinput, detail::istream_t& a_input)
+			// std::function<std::size_t(const value_t&)>
+			template <class UnaryFunctor>
+			[[nodiscard]] inline bool validate_offsets(const container_t& a_files, UnaryFunctor a_func)
 			{
-				_files.reserve(file_count());
-				for (std::size_t i = 0; i < file_count(); ++i) {
-					auto file = std::make_shared<detail::file_t>(a_mtinput);
-					file->read(a_input);
-					_files.push_back(std::move(file));
+				if (a_files.size() > 0) {
+					std::size_t offset = 0;
+					auto last = a_files.end();
+					--last;
+					for (auto it = a_files.begin(); it != last; ++it) {
+						offset += a_func(*it);
+						if (offset > detail::max_int32) {
+							return false;
+						}
+					}
 				}
+
+				return true;
+			}
+
+			[[nodiscard]] inline bool validate_data_offsets(const value_t& a_file)
+			{
+				return validate_offsets(_filesByName, a_file, file_name_sorter(), [](const value_t& a_val) -> std::size_t
+				{
+					return a_val->size();
+				});
+			}
+
+			[[nodiscard]] inline bool validate_data_offsets(const container_t& a_files)
+			{
+				return validate_offsets(a_files, [](const value_t& a_val) -> std::size_t
+				{
+					return a_val->size();
+				});
+			}
+
+			[[nodiscard]] inline bool validate_hash_offsets(const value_t& a_file)
+			{
+				auto offset = calc_hash_offset();
+				offset += detail::file_t::block_size() + 4;
+				offset += a_file->name_size();
+				return offset <= detail::max_int32;
+			}
+
+			[[nodiscard]] inline bool validate_hash_offsets(const container_t& a_files)
+			{
+				auto offset = calc_hash_offset(a_files);
+				if (offset > detail::max_int32) {
+					return false;
+				}
+
+				for (auto& file : a_files) {
+					offset += file->name_size();
+					if (offset > detail::max_int32) {
+						return false;
+					}
+				}
+
+				return true;
+			}
+
+			[[nodiscard]] inline bool validate_name_offsets(const value_t& a_file)
+			{
+				return validate_offsets(_files, a_file, file_sorter(), [](const value_t& a_val) -> std::size_t
+				{
+					return a_val->name_size();
+				});
+			}
+
+			[[nodiscard]] inline bool validate_name_offsets(const container_t& a_files)
+			{
+				return validate_offsets(a_files, [](const value_t& a_val) -> std::size_t
+				{
+					return a_val->name_size();
+				});
+			}
+
+			[[nodiscard]] inline std::size_t calc_file_size() const noexcept
+			{
+				return calc_file_size(_files);
+			}
+
+			[[nodiscard]] inline std::size_t calc_file_size(const container_t& a_files) const noexcept
+			{
+				return (detail::file_t::block_size() + 4) * a_files.size();
+			}
+
+			[[nodiscard]] inline std::size_t calc_hash_offset() const noexcept
+			{
+				return calc_hash_offset(_files);
+			}
+
+			[[nodiscard]] inline std::size_t calc_hash_offset(const container_t& a_files) const noexcept
+			{
+				return calc_file_size() + calc_names_size(a_files);
+			}
+
+			[[nodiscard]] inline std::size_t calc_names_size() const noexcept
+			{
+				return calc_names_size(_files);
+			}
+
+			[[nodiscard]] inline std::size_t calc_names_size(const container_t& a_files) const noexcept
+			{
+				std::size_t namesSize = 0;
+				for (auto& file : a_files) {
+					namesSize += file->name_size();
+				}
+				return namesSize;
+			}
+
+			[[nodiscard]] inline void prepare_for_write()
+			{
+				update_header();
+				update_files();
+			}
+
+			inline void push_back(const value_t& a_val)
+			{
+				_files.push_back(a_val);
+				_filesByName.push_back(a_val);
+			}
+
+			inline void push_back(value_t&& a_val)
+			{
+				_files.push_back(a_val);
+				_filesByName.push_back(std::move(a_val));
+			}
+
+			inline void read_data(detail::istream_t& a_input)
+			{
+				std::streampos pos = static_cast<std::streamoff>(_header.hash_offset());
+				pos += static_cast<std::streamoff>(detail::header_t::block_size());
+				pos += static_cast<std::streamoff>(detail::hash_t::block_size() * file_count());
+				a_input.seek_beg(pos);
 			}
 
 			inline void read_filenames(detail::istream_t& a_input)
@@ -1770,51 +2064,63 @@ namespace bsa
 				}
 			}
 
-			inline void read_data(detail::istream_t& a_input)
+			inline void read_initial(std::shared_ptr<detail::mtistream_t>& a_mtinput, detail::istream_t& a_input)
 			{
-				std::streampos pos = static_cast<std::streamoff>(_header.hash_offset());
-				pos += static_cast<std::streamoff>(detail::header_t::block_size());
-				pos += static_cast<std::streamoff>(detail::hash_t::block_size() * file_count());
-				a_input.seek_beg(pos);
+				reserve(file_count());
+				for (std::size_t i = 0; i < file_count(); ++i) {
+					auto file = std::make_shared<detail::file_t>(a_mtinput);
+					file->read(a_input);
+					push_back(std::move(file));
+				}
 			}
 
-			[[nodiscard]] inline std::vector<detail::file_ptr> prepare_for_write()
+			inline void reserve(std::size_t a_capacity)
 			{
-				update_header();
-				return update_files();
+				_files.reserve(a_capacity);
+				_filesByName.reserve(a_capacity);
+			}
+
+			inline void sort()
+			{
+				std::sort(_files.begin(), _files.end(), file_sorter());
+				std::sort(_filesByName.begin(), _filesByName.end(), file_name_sorter());
+			}
+
+			inline bool sanity_check()
+			{
+				for (auto& file : _files) {
+					auto hash = detail::file_hasher()(file->str_ref());
+					if (hash != file->hash_ref()) {
+						assert(false);
+					}
+				}
+
+				return true;
+			}
+
+			[[nodiscard]] inline void update_files()
+			{
+				std::size_t offset = 0;
+				for (auto& file : _filesByName) {
+					file->set_offset(offset);
+					offset += file->size();
+				}
 			}
 
 			inline void update_header()
 			{
-				std::size_t namesSize = 0;
-				for (auto& file : _files) {
-					namesSize += file->name_size();
-				}
-
-				std::size_t hashOffset = (detail::file_t::block_size() + 4) * _files.size();
-				hashOffset += namesSize;
+				auto hashOffset = calc_hash_offset();
 				_header.set_hash_offset(hashOffset);
+				update_size();
+			}
+
+			inline void update_size()
+			{
 				_header.set_file_count(_files.size());
 			}
 
-			[[nodiscard]] inline std::vector<detail::file_ptr> update_files()
-			{
-				auto filesByName = _files;
-				std::sort(filesByName.begin(), filesByName.end(), [](const detail::file_ptr& a_lhs, const detail::file_ptr& a_rhs) -> bool
-				{
-					return a_lhs->str_ref() < a_rhs->str_ref();
-				});
-
-				std::size_t offset = 0;
-				for (auto& file : filesByName) {
-					file->set_offset(offset);
-					offset += file->size();
-				}
-
-				return filesByName;
-			}
-
-			std::vector<detail::file_ptr> _files;
+			container_t _files;
+			container_t _filesByName;
 			detail::header_t _header;
 		};
 	}
