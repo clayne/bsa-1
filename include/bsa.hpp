@@ -588,8 +588,8 @@ namespace bsa
 
 				[[nodiscard]] static constexpr std::size_t block_size() noexcept { return sizeof(block_t); }
 
-				[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t> (_block.fileCount); }
-				[[nodiscard]] constexpr std::size_t hash_offset() const noexcept { return static_cast<std::size_t> (_block.hashOffset); }
+				[[nodiscard]] constexpr std::size_t file_count() const noexcept { return static_cast<std::size_t>(_block.fileCount); }
+				[[nodiscard]] constexpr std::size_t hash_offset() const noexcept { return static_cast<std::size_t>(_block.hashOffset); }
 				[[nodiscard]] constexpr archive_version version() const noexcept { return static_cast<archive_version>(_block.version); }
 
 				constexpr void set_file_count(std::size_t a_count)
@@ -804,7 +804,6 @@ namespace bsa
 
 				NumericBlock _impl;
 			};
-			using hash_ref = std::reference_wrapper<hash_t>;
 
 
 			class file_hasher
@@ -822,9 +821,7 @@ namespace bsa
 				[[nodiscard]] inline hash_t operator()(std::string_view a_path) const
 				{
 					path_t path(a_path);
-					auto view = path.string_view();
-					verify(view);
-					return hash(view);
+					return operator()(path);
 				}
 
 				[[nodiscard]] inline hash_t operator()(const path_t& a_path) const
@@ -1038,7 +1035,7 @@ namespace bsa
 						a_input.get(ch);
 						_name.push_back(ch);
 					} while (ch != '\0' && a_input);
-					_name.pop_back();
+					_name.pop_back();	// discard null terminator
 
 					if (!a_input) {
 						throw input_error();
@@ -1168,17 +1165,19 @@ namespace bsa
 		class hash
 		{
 		public:
-			hash() = delete;
+			constexpr hash() noexcept :
+				_impl()
+			{}
 
-			inline hash(const hash& a_rhs) noexcept :
+			constexpr hash(const hash& a_rhs) noexcept :
 				_impl(a_rhs._impl)
 			{}
 
-			inline hash(hash&& a_rhs) noexcept :
+			constexpr hash(hash&& a_rhs) noexcept :
 				_impl(std::move(a_rhs._impl))
 			{}
 
-			inline hash& operator=(const hash& a_rhs) noexcept
+			constexpr hash& operator=(const hash& a_rhs) noexcept
 			{
 				if (this != std::addressof(a_rhs)) {
 					_impl = a_rhs._impl;
@@ -1186,7 +1185,7 @@ namespace bsa
 				return *this;
 			}
 
-			inline hash& operator=(hash&& a_rhs) noexcept
+			constexpr hash& operator=(hash&& a_rhs) noexcept
 			{
 				if (this != std::addressof(a_rhs)) {
 					_impl = std::move(a_rhs._impl);
@@ -1194,23 +1193,26 @@ namespace bsa
 				return *this;
 			}
 
-			[[nodiscard]] inline std::uint32_t high_hash() const noexcept { return _impl.get().high(); }
-			[[nodiscard]] inline std::uint32_t low_hash() const noexcept { return _impl.get().low(); }
-			[[nodiscard]] inline std::uint64_t numeric_hash() const noexcept { return _impl.get().numeric(); }
+			// consider dropping "_hash" postfix
+			[[nodiscard]] constexpr std::uint32_t high_hash() const noexcept { return _impl.high(); }
+			[[nodiscard]] constexpr std::uint32_t low_hash() const noexcept { return _impl.low(); }
+			[[nodiscard]] constexpr std::uint64_t numeric_hash() const noexcept { return _impl.numeric(); }
 
 		protected:
 			friend class file;
 
-			explicit inline hash(detail::hash_t& a_rhs) noexcept :
-				_impl(std::ref(a_rhs))
-			{}
-
-			explicit inline hash(const detail::hash_ref& a_rhs) noexcept :
+			explicit constexpr hash(const value_type& a_rhs) noexcept :
 				_impl(a_rhs)
 			{}
 
+			explicit constexpr hash(value_type&& a_rhs) noexcept :
+				_impl(std::move(a_rhs))
+			{}
+
 		private:
-			detail::hash_ref _impl;
+			using value_type = detail::hash_t;
+		
+			value_type _impl;
 		};
 
 
@@ -1339,8 +1341,6 @@ namespace bsa
 			[[nodiscard]] constexpr value_type& file_ptr() noexcept { return _impl; }
 			[[nodiscard]] constexpr const value_type& file_ptr() const noexcept { return _impl; }
 
-			[[nodiscard]] inline value_type&& steal_file() noexcept { return std::move(_impl); }
-
 		private:
 			inline void open_and_pack(const std::filesystem::path& a_path)
 			{
@@ -1430,13 +1430,6 @@ namespace bsa
 				return tmp;
 			}
 
-			friend inline void swap(file_iterator& a_lhs, file_iterator& a_rhs)
-			{
-				auto tmp = std::move(a_lhs);
-				a_lhs = std::move(a_rhs);
-				a_rhs = std::move(tmp);
-			}
-
 		protected:
 			friend class archive;
 
@@ -1446,7 +1439,7 @@ namespace bsa
 				_pos(NPOS)
 			{
 				if (a_first != a_last) {
-					_files.reset(new typename decltype(_files)::element_type());
+					_files.reset(new container_type());
 					_pos = 0;
 					do {
 						_files->push_back(value_type(static_cast<const detail::file_ptr&>(*a_first)));
@@ -1456,13 +1449,23 @@ namespace bsa
 			}
 
 		private:
+			using container_type = std::vector<value_type>;
+
 			inline reference fetch() { return (*_files)[_pos]; }
 
 			static constexpr auto NPOS = std::numeric_limits<std::size_t>::max();
 
-			std::shared_ptr<std::vector<value_type>> _files;
+			std::shared_ptr<container_type> _files;
 			std::size_t _pos;
 		};
+
+
+		inline void swap(file_iterator& a_lhs, file_iterator& a_rhs)
+		{
+			auto tmp = std::move(a_lhs);
+			a_lhs = std::move(a_rhs);
+			a_rhs = std::move(tmp);
+		}
 
 
 		class archive
@@ -1702,16 +1705,7 @@ namespace bsa
 
 			inline void insert(file&& a_file)
 			{
-				if (!can_insert(a_file.file_ptr())) {
-					throw size_error();
-				} else if (!a_file || a_file.empty()) {
-					throw empty_file();
-				} else if (!contains(a_file)) {
-					reserve(size() + 1);
-					push_back(a_file.steal_file());
-					sort();
-					update_size();
-				}
+				insert(a_file);
 			}
 
 			template <class InputIt>
@@ -1777,8 +1771,8 @@ namespace bsa
 
 			[[nodiscard]] inline file find(const std::string& a_path)
 			{
-				auto view = static_cast<std::string_view>(a_path);
-				return find(view);
+				auto path = static_cast<std::string_view>(a_path);
+				return find(path);
 			}
 
 			[[nodiscard]] inline file find(const std::string_view& a_path)
