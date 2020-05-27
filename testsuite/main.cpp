@@ -26,7 +26,11 @@ public:
 		_start = clock_t::now();
 	}
 
-	template <class Duration, std::enable_if_t<is_duration<Duration>::value, int> = 0>
+	template <
+		class Duration,
+		std::enable_if_t<
+			is_duration<Duration>::value,
+			int> = 0>
 	void stamp()
 	{
 		auto end = clock_t::now();
@@ -104,7 +108,7 @@ void repack_tes3()
 
 	archive.insert(files.begin(), files.end());
 	archive << "E:\\Repos\\bsa\\mytest.bsa";
-	//compare_tes3("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa", "E:\\Repos\\bsa\\mytest.bsa");
+	compare_tes3("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa", "E:\\Repos\\bsa\\mytest.bsa");
 }
 
 
@@ -218,7 +222,7 @@ int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
 
 	//parse_fo4();
 
-#if 1
+#if 0
 	{
 		bsa::tes3::archive src("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
 		bsa::tes3::archive dst;
