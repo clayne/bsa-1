@@ -7,6 +7,39 @@
 #include "bsa.hpp"
 
 
+namespace stl
+{
+	using namespace bsa::stl;
+
+	namespace filesystem
+	{
+		using namespace bsa::stl::filesystem;
+
+#if __cplusplus >= 201703L
+		using std::filesystem::directory_iterator;
+		using std::filesystem::file_size;
+		using std::filesystem::recursive_directory_iterator;
+		using std::filesystem::relative;
+
+		inline bool is_regular_file(const std::filesystem::directory_entry& a_entry)
+		{
+			return a_entry.is_regular_file();
+		}
+#else
+		using boost::filesystem::directory_iterator;
+		using boost::filesystem::file_size;
+		using boost::filesystem::recursive_directory_iterator;
+		using boost::filesystem::relative;
+
+		inline bool is_regular_file(const boost::filesystem::directory_entry& a_entry)
+		{
+			return a_entry.status().type() == boost::filesystem::file_type::regular_file;
+		}
+#endif
+	}
+}
+
+
 class stopwatch
 {
 private:
@@ -47,21 +80,21 @@ private:
 
 void extract_tes3()
 {
-	std::filesystem::path path("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
+	stl::filesystem::path path("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
 	bsa::tes3::archive archive(path);
 	archive.extract("E:\\Repos\\bsa\\mytest");
 }
 
 
-void compare_tes3(std::filesystem::path a_lhsP, std::filesystem::path a_rhsP)
+void compare_tes3(stl::filesystem::path a_lhsP, stl::filesystem::path a_rhsP)
 {
-	if (std::filesystem::file_size(a_lhsP) != std::filesystem::file_size(a_rhsP)) {
+	if (stl::filesystem::file_size(a_lhsP) != stl::filesystem::file_size(a_rhsP)) {
 		assert(false);
 	}
 
 	constexpr auto FLAGS = std::ios_base::in | std::ios_base::binary;
-	std::ifstream lhsF(a_lhsP, FLAGS);
-	std::ifstream rhsF(a_rhsP, FLAGS);
+	std::ifstream lhsF(a_lhsP.native(), FLAGS);
+	std::ifstream rhsF(a_rhsP.native(), FLAGS);
 
 	do {
 		if (lhsF.get() != rhsF.get()) {
@@ -99,10 +132,10 @@ void repack_tes3()
 {
 	bsa::tes3::archive archive;
 	std::vector<bsa::tes3::file> files;
-	std::filesystem::path root = "E:\\Repos\\bsa\\mytest";
-	for (auto& dirEntry : std::filesystem::recursive_directory_iterator(root)) {
-		if (dirEntry.is_regular_file()) {
-			files.emplace_back(std::filesystem::relative(dirEntry.path(), root).string(), dirEntry.path());
+	stl::filesystem::path root = "E:\\Repos\\bsa\\mytest";
+	for (auto& dirEntry : stl::filesystem::recursive_directory_iterator(root)) {
+		if (stl::filesystem::is_regular_file(dirEntry)) {
+			files.emplace_back(stl::filesystem::relative(dirEntry.path(), root).string(), dirEntry.path());
 		}
 	}
 
@@ -118,7 +151,7 @@ void parse_tes3()
 		"E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files"
 	};
 
-	std::filesystem::path path;
+	stl::filesystem::path path;
 	std::regex regex(".*.bsa$", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::tes3::archive archive;
 	std::ios_base::sync_with_stdio(false);
@@ -126,7 +159,7 @@ void parse_tes3()
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
 
-		for (auto& sysEntry : std::filesystem::directory_iterator(path)) {
+		for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
 			if (!std::regex_match(sysEntry.path().string(), regex)) {
 				continue;
 			}
@@ -155,7 +188,7 @@ void parse_tes4()
 		"D:\\Games\\SteamLibrary\\steamapps\\common\\Fallout New Vegas\\Data",
 	};
 
-	std::filesystem::path path;
+	stl::filesystem::path path;
 	std::regex regex(".*.bsa$", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::tes4::archive archive;
 	std::ios_base::sync_with_stdio(false);
@@ -163,7 +196,7 @@ void parse_tes4()
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
 
-		for (auto& sysEntry : std::filesystem::directory_iterator(path)) {
+		for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
 			if (!std::regex_match(sysEntry.path().string(), regex)) {
 				continue;
 			}
@@ -186,7 +219,7 @@ void parse_fo4()
 		"E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data"
 	};
 
-	std::filesystem::path path;
+	stl::filesystem::path path;
 	std::regex regex(".*.ba2$", std::regex_constants::grep | std::regex_constants::icase);
 	bsa::fo4::archive archive;
 	std::ios_base::sync_with_stdio(false);
@@ -194,7 +227,7 @@ void parse_fo4()
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
 
-		for (auto& sysEntry : std::filesystem::directory_iterator(path)) {
+		for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
 			if (!std::regex_match(sysEntry.path().string(), regex)) {
 				continue;
 			}
@@ -208,7 +241,7 @@ void parse_fo4()
 }
 
 
-int main([[maybe_unused]] int a_argc, [[maybe_unused]] const char* a_argv[])
+int main(int, const char*[])
 {
 	stopwatch watch;
 	watch.start();
