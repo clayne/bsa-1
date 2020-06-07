@@ -249,7 +249,7 @@ int main(int, const char*[])
 	//extract_tes3();
 	//repack_tes3();
 	//write_tes3();
-	//parse_tes3();
+	parse_tes3();
 
 	//parse_tes4();
 

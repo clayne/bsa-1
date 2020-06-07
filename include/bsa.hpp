@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <exception>
@@ -21,11 +22,7 @@
 #include <utility>
 #include <vector>
 
-#if __has_include("boost/iostreams/device/mapped_file.hpp")
 #include <boost/iostreams/device/mapped_file.hpp>
-#else
-#error https://www.boost.org/users/download/
-#endif
 
 
 #if __cplusplus >= 201402L	// C++14
@@ -39,6 +36,7 @@ namespace bsa
 	{
 		using std::conditional_t;
 		using std::enable_if_t;
+		using std::underlying_type_t;
 	}
 }
 
@@ -56,6 +54,9 @@ namespace bsa
 
 		template <bool B, class T = void>
 		using enable_if_t = typename std::enable_if<B, T>::type;
+
+		template <class T>
+		using underlying_type_t = typename underlying_type<T>::type;
 	}
 }
 
@@ -66,6 +67,7 @@ namespace bsa
 
 #define BSA_CXX17_CONSTEXPR constexpr
 #define BSA_CXX17_NOEXCEPT noexcept(true)
+#define BSA_CXX17_INLINE inline
 
 #define BSA_FALLTHROUGH [[fallthrough]]
 #define BSA_MAYBEUNUSED [[maybe_unused]]
@@ -106,10 +108,16 @@ namespace bsa
 		using std::disjunction;
 		using std::disjunction_v;
 		using std::is_arithmetic_v;
+		using std::is_enum_v;
+		using std::is_integral_v;
 		using std::is_invocable_r_v;
 		using std::is_pointer_v;
+		using std::is_signed_v;
 		using std::is_unsigned_v;
 		using std::negation;
+
+		using std::byte;
+		using std::to_integer;
 	}
 }
 
@@ -117,19 +125,16 @@ namespace bsa
 
 #define BSA_CXX17_CONSTEXPR inline
 #define BSA_CXX17_NOEXCEPT noexcept(false)
+#define BSA_CXX17_INLINE static
 
 #define BSA_FALLTHROUGH
 #define BSA_MAYBEUNUSED
 #define BSA_NODISCARD
 
-#if __has_include("boost/filesystem.hpp") && __has_include("boost/utility/string_ref.hpp") && __has_include("boost/optional.hpp") && __has_include("boost/variant2/variant.hpp")
 #include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/string_ref.hpp>
 #include <boost/variant2/variant.hpp>
-#else
-#error https://www.boost.org/users/download/
-#endif
 
 namespace bsa
 {
@@ -196,6 +201,12 @@ namespace bsa
 		template <class T>
 		static constexpr bool is_arithmetic_v = std::is_arithmetic<T>::value;
 
+		template <class T>
+		static constexpr bool is_enum_v = std::is_enum<T>::value;
+
+		template <class T>
+		static constexpr bool is_integral_v = std::is_integral<T>::value;
+
 		template <class, class, class, class...>
 		struct _is_invocable_r :
 			std::false_type
@@ -226,12 +237,29 @@ namespace bsa
 		static constexpr bool is_pointer_v = std::is_pointer<T>::value;
 
 		template <class T>
+		static constexpr bool is_signed_v = is_signed<T>::value;
+
+		template <class T>
 		static constexpr bool is_unsigned_v = std::is_unsigned<T>::value;
 
 		template <class B>
 		struct negation :
 			std::bool_constant<!bool(B::value)>
 		{};
+
+		enum class byte : unsigned char
+		{
+		};
+
+		template <
+			class IntegerType
+				stl::enable_if_t<
+					stl::is_integral_v<IntegerType>,
+					int> = 0>
+		constexpr IntegerType to_integer(stl::byte a_byte) noexcept
+		{
+			return static_cast<IntegerType>(a_byte);
+		}
 	}
 }
 
@@ -473,7 +501,7 @@ namespace bsa
 	{
 	public:
 		inline io_error() noexcept :
-			io_error("failure while performing i/o with archive")
+			io_error("failure while performing i/o with the archive")
 		{}
 
 		inline io_error(const io_error&) = default;
@@ -592,29 +620,52 @@ namespace bsa
 
 	namespace detail
 	{
-		static constexpr auto max_int32 =
+		BSA_CXX17_INLINE constexpr auto max_int32 =
 			std::size_t{ (std::numeric_limits<std::int32_t>::max)() };
 
-		static constexpr auto max_uint32 =
+		BSA_CXX17_INLINE constexpr auto max_uint32 =
 			std::size_t{ (std::numeric_limits<std::uint32_t>::max)() };
+
+
+		template <class T, class = void>
+		struct underlying_type
+		{
+			using type = T;
+		};
+
+		template <class T>
+		struct underlying_type<
+			T,
+			stl::enable_if_t<
+				stl::is_enum_v<T>>>
+		{
+			using type = stl::underlying_type_t<T>;
+		};
+
+		template <class T>
+		using underlying_type_t = typename underlying_type<T>::type;
 
 
 		template <
 			class T,
 			class U,
+			class X = stl::conditional_t<
+				stl::is_enum_v<T>,
+				underlying_type_t<T>,
+				T>,
+			class Y = stl::conditional_t<
+				stl::is_enum_v<U>,
+				underlying_type_t<U>,
+				U>,
 			stl::enable_if_t<
 				stl::conjunction_v<
-					std::is_arithmetic<T>,
-					std::is_arithmetic<U>,
+					std::is_arithmetic<X>,
+					std::is_arithmetic<Y>,
 					stl::disjunction<
 						std::bool_constant<
-							(sizeof(U) >= sizeof(T))>,
-						stl::conjunction<
-							std::is_signed<U>,
-							std::is_unsigned<T>>,
-						stl::conjunction<
-							std::is_unsigned<U>,
-							std::is_signed<T>>>>,
+							(sizeof(Y) >= sizeof(X))>,
+						std::bool_constant<
+							stl::is_signed_v<X> != stl::is_signed_v<Y>>>>,
 				int> = 0>
 		BSA_NODISCARD constexpr T narrow_cast(const U a_val) noexcept
 		{
@@ -632,40 +683,11 @@ namespace bsa
 		}
 
 
-		BSA_NODISCARD constexpr std::uint16_t swap_endian(std::uint16_t a_val) noexcept
+		enum class endian
 		{
-			constexpr auto BYTE = std::uint16_t{ std::numeric_limits<std::uint8_t>::digits };
-
-			return narrow_cast<std::uint16_t>(
-				((a_val >> BYTE) & 0x00FF) |
-				((a_val << BYTE) & 0xFF00));
-		}
-
-
-		BSA_NODISCARD constexpr std::uint32_t swap_endian(std::uint32_t a_val) noexcept
-		{
-			constexpr auto BYTE = std::uint32_t{ std::numeric_limits<std::uint8_t>::digits };
-
-			return std::uint32_t{ ((a_val >> 3 * BYTE) & 0x000000FF) |
-								  ((a_val >> 1 * BYTE) & 0x0000FF00) |
-								  ((a_val << 1 * BYTE) & 0x00FF0000) |
-								  ((a_val << 3 * BYTE) & 0xFF000000) };
-		}
-
-
-		BSA_NODISCARD constexpr std::uint64_t swap_endian(std::uint64_t a_val) noexcept
-		{
-			constexpr auto BYTE = std::uint64_t{ std::numeric_limits<std::uint8_t>::digits };
-
-			return std::uint64_t{ ((a_val >> 7 * BYTE) & 0x00000000000000FF) |
-								  ((a_val >> 5 * BYTE) & 0x000000000000FF00) |
-								  ((a_val >> 3 * BYTE) & 0x0000000000FF0000) |
-								  ((a_val >> 1 * BYTE) & 0x00000000FF000000) |
-								  ((a_val << 1 * BYTE) & 0x000000FF00000000) |
-								  ((a_val << 3 * BYTE) & 0x0000FF0000000000) |
-								  ((a_val << 5 * BYTE) & 0x00FF000000000000) |
-								  ((a_val << 7 * BYTE) & 0xFF00000000000000) };
-		}
+			little,
+			big
+		};
 
 
 		// Bethesda uses std::tolower to convert chars to lowercase, however
@@ -837,41 +859,37 @@ namespace bsa
 		public:
 			using stream_type = boost::iostreams::mapped_file;
 
-			using reference = stream_type&;
-			using const_reference = const stream_type&;
-			using pointer = stream_type*;
-			using const_pointer = const stream_type*;
-
-			using char_type = typename stream_type::char_type;
-			using traits_type = std::char_traits<char_type>;
-			using int_type = typename traits_type::int_type;
-			using size_type = typename stream_type::size_type;
-			using difference_type = std::ptrdiff_t;
+			using size_type = std::size_t;
 			using mapmode = typename stream_type::mapmode;
 
 			inline istream_t() noexcept :
 				_stream(),
-				_pos(0)
+				_pos(0),
+				_endian(endian::little)
 			{}
 
 			inline istream_t(const istream_t& a_rhs) :
 				_stream(a_rhs._stream),
-				_pos(a_rhs._pos)
+				_pos(a_rhs._pos),
+				_endian(endian::little)
 			{}
 
 			inline istream_t(istream_t&& a_rhs) noexcept :
 				_stream(std::move(a_rhs._stream)),
-				_pos(std::move(a_rhs._pos))
+				_pos(std::move(a_rhs._pos)),
+				_endian(endian::little)
 			{}
 
 			inline istream_t(stream_type a_stream) :
 				_stream(std::move(a_stream)),
-				_pos(0)
+				_pos(0),
+				_endian(endian::little)
 			{}
 
 			inline istream_t(const stl::filesystem::path& a_path) :
 				_stream(),
-				_pos(0)
+				_pos(0),
+				_endian(endian::little)
 			{
 				open(a_path);
 			}
@@ -883,6 +901,7 @@ namespace bsa
 				if (this != std::addressof(a_rhs)) {
 					_stream = a_rhs._stream;
 					_pos = a_rhs._pos;
+					_endian = a_rhs._endian;
 				}
 				return *this;
 			}
@@ -894,82 +913,168 @@ namespace bsa
 
 					_pos = std::move(a_rhs._pos);
 					a_rhs._pos = 0;
+
+					_endian = std::move(a_rhs._endian);
+					a_rhs._endian = endian::little;
 				}
 				return *this;
 			}
 
-			template <
-				class T,
-				stl::enable_if_t<
-					stl::conjunction_v<
-						std::is_arithmetic<T>,
-						stl::negation<
-							std::is_const<T>>,
-						stl::negation<
-							std::is_volatile<T>>>,
-					int> = 0>
-			inline istream_t& operator>>(T& a_value)
+			inline istream_t& operator>>(std::int8_t& a_value)
 			{
-				std::array<char_type, sizeof(T)> buf;
-				read(buf.data(), buf.size());
-				a_value = *stl::start_lifetime_as<T>(buf.data());
+				a_value = stl::to_integer<std::int8_t>(ref(_pos++));
+				return *this;
+			}
+
+			inline istream_t& operator>>(std::uint8_t& a_value)
+			{
+				a_value = stl::to_integer<std::uint8_t>(ref(_pos++));
+				return *this;
+			}
+
+			inline istream_t& operator>>(std::uint16_t& a_value)
+			{
+				constexpr auto BYTE = std::uint16_t{ std::numeric_limits<std::uint8_t>::digits };
+
+				switch (_endian) {
+				case endian::little:
+					a_value =
+						narrow_cast<std::uint16_t>(
+							(stl::to_integer<std::uint16_t>(ref(_pos++)) << std::uint16_t{ 0 * BYTE }) |
+							(stl::to_integer<std::uint16_t>(ref(_pos++)) << std::uint16_t{ 1 * BYTE }));
+					break;
+				case endian::big:
+					a_value =
+						narrow_cast<std::uint16_t>(
+							(stl::to_integer<std::uint16_t>(ref(_pos++)) << std::uint16_t{ 1 * BYTE }) |
+							(stl::to_integer<std::uint16_t>(ref(_pos++)) << std::uint16_t{ 0 * BYTE }));
+					break;
+				default:
+					throw input_error();
+				}
+
+				return *this;
+			}
+
+			inline istream_t& operator>>(std::uint32_t& a_value)
+			{
+				constexpr auto BYTE = std::uint32_t{ std::numeric_limits<std::uint8_t>::digits };
+
+				switch (_endian) {
+				case endian::little:
+					a_value =
+						std::uint32_t{
+							(stl::to_integer<std::uint32_t>(ref(_pos++)) << std::uint32_t{ 0 * BYTE }) |
+							(stl::to_integer<std::uint32_t>(ref(_pos++)) << std::uint32_t{ 1 * BYTE }) |
+							(stl::to_integer<std::uint32_t>(ref(_pos++)) << std::uint32_t{ 2 * BYTE }) |
+							(stl::to_integer<std::uint32_t>(ref(_pos++)) << std::uint32_t{ 3 * BYTE })
+						};
+					break;
+				case endian::big:
+					a_value =
+						std::uint32_t{
+							(stl::to_integer<std::uint32_t>(ref(_pos++)) << std::uint32_t{ 3 * BYTE }) |
+							(stl::to_integer<std::uint32_t>(ref(_pos++)) << std::uint32_t{ 2 * BYTE }) |
+							(stl::to_integer<std::uint32_t>(ref(_pos++)) << std::uint32_t{ 1 * BYTE }) |
+							(stl::to_integer<std::uint32_t>(ref(_pos++)) << std::uint32_t{ 0 * BYTE })
+						};
+					break;
+				default:
+					throw input_error();
+				}
+
+				return *this;
+			}
+
+			inline istream_t& operator>>(std::uint64_t& a_value)
+			{
+				constexpr auto BYTE = std::uint64_t{ std::numeric_limits<std::uint8_t>::digits };
+
+				switch (_endian) {
+				case endian::little:
+					a_value =
+						std::uint64_t{
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 0 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 1 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 2 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 3 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 4 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 5 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 6 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 7 * BYTE })
+						};
+					break;
+				case endian::big:
+					a_value =
+						std::uint64_t{
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 7 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 6 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 5 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 4 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 3 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 2 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 1 * BYTE }) |
+							(stl::to_integer<std::uint64_t>(ref(_pos++)) << std::uint64_t{ 0 * BYTE })
+						};
+					break;
+				default:
+					throw input_error();
+				}
+
 				return *this;
 			}
 
 			template <std::size_t N>
-			inline istream_t& operator>>(std::array<char_type, N>& a_value)
+			inline istream_t& operator>>(std::array<char, N>& a_value)
 			{
-				return read(a_value.data(), a_value.size());
+				read(a_value.data(), a_value.size());
+				return *this;
+			}
+
+			constexpr istream_t& operator>>(endian a_endian) noexcept
+			{
+				_endian = a_endian;
+				return *this;
 			}
 
 			BSA_NODISCARD inline bool operator!() const { return !is_open(); }
 			BSA_NODISCARD explicit inline operator bool() const { return is_open(); }
 
-			inline istream_t& get(char_type& a_ch)
+			inline void get(char& a_ch)
 			{
-				assert(is_open());
-				a_ch = *fetch(_pos++);
-				return *this;
+				a_ch = narrow_cast<char>(ref(_pos++));
 			}
 
 			template <class OutputIt>
-			inline istream_t& read(OutputIt a_dst, size_type a_count)
+			inline void read(OutputIt a_dst, size_type a_count)
 			{
-				assert(is_open());
 				assert(_pos + a_count <= _stream.size());
-				std::copy_n(fetch(_pos), a_count, a_dst);
+				std::copy_n(reinterpret_cast<char*>(ptr(_pos)), a_count, a_dst);
 				_pos += a_count;
-				return *this;
 			}
 
 			BSA_NODISCARD constexpr size_type tell() const noexcept { return _pos; }
 
 			// seek absolute position
-			constexpr istream_t& seek_abs(size_type a_pos) noexcept
+			inline void seek_abs(size_type a_pos) noexcept
 			{
+				assert(a_pos < _stream.size());
 				_pos = a_pos;
-				return *this;
 			}
 
-			// seek to beginning
-			constexpr istream_t& seek_beg() noexcept
-			{
-				_pos = 0;
-				return *this;
-			}
-
-			// seek from beginning
-			constexpr istream_t& seek_beg(size_type a_pos) noexcept
-			{
-				_pos = a_pos;
-				return *this;
-			}
+			constexpr void seek_beg() noexcept { _pos = 0; }					 // seek to beginning
+			inline void seek_beg(size_type a_pos) noexcept { seek_abs(a_pos); }	 // seek from beginning
 
 			// seek relative to current position
-			constexpr istream_t& seek_rel(difference_type a_off) noexcept
+			template <
+				class T,
+				stl::enable_if_t<
+					stl::is_integral_v<T>,
+					int> = 0>
+			inline void seek_rel(T a_off) noexcept
 			{
+				assert(_pos + a_off < _stream.size());
 				_pos += a_off;
-				return *this;
 			}
 
 			BSA_NODISCARD inline bool is_open() const { return _stream.is_open(); }
@@ -996,14 +1101,24 @@ namespace bsa
 			inline void close() { _stream.close(); }
 
 		private:
-			BSA_NODISCARD inline observer<char_type*> fetch(std::size_t a_pos) const
+			BSA_NODISCARD inline observer<stl::byte*> data() const
+			{
+				assert(is_open());
+				return reinterpret_cast<stl::byte*>(_stream.data());
+			}
+
+			BSA_NODISCARD inline observer<stl::byte*> fetch(size_type a_pos) const
 			{
 				assert(a_pos < _stream.size());
-				return _stream.data() + a_pos;
+				return data() + a_pos;
 			}
+
+			BSA_NODISCARD inline observer<stl::byte*> ptr(size_type a_pos) const { return fetch(a_pos); }
+			BSA_NODISCARD inline stl::byte& ref(size_type a_pos) const { return *fetch(a_pos); }
 
 			stream_type _stream;
 			size_type _pos;
+			endian _endian;
 		};
 
 
@@ -1106,7 +1221,7 @@ namespace bsa
 	namespace tes3	// The Elder Scrolls III: Morrowind
 	{
 		using archive_version = std::size_t;
-		static constexpr archive_version v256 = 256;
+		BSA_CXX17_INLINE constexpr archive_version v256 = 256;
 
 
 		class archive;
@@ -1728,7 +1843,7 @@ namespace bsa
 				inline std::vector<char> load_data()
 				{
 					const auto pos = _input.tell();
-					_input.seek_rel(narrow_cast<std::ptrdiff_t>(offset()));
+					_input.seek_rel(offset());
 
 					std::vector<char> data(size(), '\0');
 					_input.read(data.data(), size());
@@ -2623,8 +2738,7 @@ namespace bsa
 
 			inline void read_filenames(detail::istream_t& a_input)
 			{
-				using integer_t = std::uint32_t;
-				std::vector<integer_t> offsets(file_count());
+				std::vector<std::uint32_t> offsets(file_count());
 				for (auto& offset : offsets) {
 					a_input >> offset;
 				}
@@ -2713,33 +2827,33 @@ namespace bsa
 	namespace tes4	// The Elder Scrolls IV: Oblivion
 	{
 		using archive_flag = std::uint32_t;	 // BSArchive::ARCHIVE_FLAGS
-		static constexpr archive_flag directory_strings_bit = 1 << 0;
-		static constexpr archive_flag file_strings_bit = 1 << 1;
-		static constexpr archive_flag compressed_bit = 1 << 2;
-		static constexpr archive_flag retain_directory_names_bit = 1 << 3;
-		static constexpr archive_flag retain_file_names_bit = 1 << 4;
-		static constexpr archive_flag retain_file_name_offsets_bit = 1 << 5;
-		static constexpr archive_flag xbox_archive_bit = 1 << 6;
-		static constexpr archive_flag retain_strings_during_startup_bit = 1 << 7;
-		static constexpr archive_flag embedded_file_names_bit = 1 << 8;
-		static constexpr archive_flag xbox_compressed_bit = 1 << 9;
+		BSA_CXX17_INLINE constexpr archive_flag directory_strings_bit = 1 << 0;
+		BSA_CXX17_INLINE constexpr archive_flag file_strings_bit = 1 << 1;
+		BSA_CXX17_INLINE constexpr archive_flag compressed_bit = 1 << 2;
+		BSA_CXX17_INLINE constexpr archive_flag retain_directory_names_bit = 1 << 3;
+		BSA_CXX17_INLINE constexpr archive_flag retain_file_names_bit = 1 << 4;
+		BSA_CXX17_INLINE constexpr archive_flag retain_file_name_offsets_bit = 1 << 5;
+		BSA_CXX17_INLINE constexpr archive_flag xbox_archive_bit = 1 << 6;
+		BSA_CXX17_INLINE constexpr archive_flag retain_strings_during_startup_bit = 1 << 7;
+		BSA_CXX17_INLINE constexpr archive_flag embedded_file_names_bit = 1 << 8;
+		BSA_CXX17_INLINE constexpr archive_flag xbox_compressed_bit = 1 << 9;
 
 
 		using archive_type = std::uint16_t;	 // ARCHIVE_TYPE_INDEX
-		static constexpr archive_type meshesbit = 1 << 0;
-		static constexpr archive_type texturesbit = 1 << 1;
-		static constexpr archive_type menusbit = 1 << 2;
-		static constexpr archive_type soundsbit = 1 << 3;
-		static constexpr archive_type voicesbit = 1 << 4;
-		static constexpr archive_type shadersbit = 1 << 5;
-		static constexpr archive_type treesbit = 1 << 6;
-		static constexpr archive_type fontsbit = 1 << 7;
-		static constexpr archive_type miscbit = 1 << 8;
+		BSA_CXX17_INLINE constexpr archive_type meshesbit = 1 << 0;
+		BSA_CXX17_INLINE constexpr archive_type texturesbit = 1 << 1;
+		BSA_CXX17_INLINE constexpr archive_type menusbit = 1 << 2;
+		BSA_CXX17_INLINE constexpr archive_type soundsbit = 1 << 3;
+		BSA_CXX17_INLINE constexpr archive_type voicesbit = 1 << 4;
+		BSA_CXX17_INLINE constexpr archive_type shadersbit = 1 << 5;
+		BSA_CXX17_INLINE constexpr archive_type treesbit = 1 << 6;
+		BSA_CXX17_INLINE constexpr archive_type fontsbit = 1 << 7;
+		BSA_CXX17_INLINE constexpr archive_type miscbit = 1 << 8;
 
 		using archive_version = std::size_t;
-		static constexpr archive_version v103 = 103;
-		static constexpr archive_version v104 = 104;
-		static constexpr archive_version v105 = 105;
+		BSA_CXX17_INLINE constexpr archive_version v103 = 103;
+		BSA_CXX17_INLINE constexpr archive_version v104 = 104;
+		BSA_CXX17_INLINE constexpr archive_version v105 = 105;
 
 
 		namespace detail
@@ -2906,7 +3020,6 @@ namespace bsa
 
 					inline void read(istream_t& a_input)
 					{
-						std::uint16_t pad;
 						a_input >>
 							tag >>
 							version >>
@@ -2916,8 +3029,8 @@ namespace bsa
 							fileCount >>
 							directoryNamesLength >>
 							fileNamesLength >>
-							archiveTypes >>
-							pad;
+							archiveTypes;
+						a_input.seek_rel(2);
 					}
 
 					std::array<char, 4> tag;
@@ -2990,25 +3103,18 @@ namespace bsa
 				BSA_NODISCARD constexpr std::uint64_t numeric() const noexcept
 				{
 					constexpr auto BYTE = std::uint64_t{ std::numeric_limits<std::uint8_t>::digits };
-					return narrow_cast<std::uint64_t>(_block.last) |
-						   (narrow_cast<std::uint64_t>(_block.last2) << 1 * BYTE) |
-						   (narrow_cast<std::uint64_t>(_block.length) << 2 * BYTE) |
-						   (narrow_cast<std::uint64_t>(_block.first) << 3 * BYTE) |
-						   (std::uint64_t{ _block.crc } << 4 * BYTE);
+					return std::uint64_t{
+						(narrow_cast<std::uint64_t>(_block.last) << std::uint64_t{ 0 * BYTE }) |
+						(narrow_cast<std::uint64_t>(_block.last2) << std::uint64_t{ 1 * BYTE }) |
+						(narrow_cast<std::uint64_t>(_block.length) << std::uint64_t{ 2 * BYTE }) |
+						(narrow_cast<std::uint64_t>(_block.first) << std::uint64_t{ 3 * BYTE }) |
+						(std::uint64_t{ _block.crc } << std::uint64_t{ 4 * BYTE })
+					};
 				}
 
 				inline void read(istream_t& a_input, const header_t& a_header)
 				{
-					_block.read(a_input);
-
-					if (a_header.xbox_archive()) {
-						byte_swap();
-					}
-				}
-
-				constexpr void byte_swap() noexcept
-				{
-					_block.crc = swap_endian(_block.crc);
+					_block.read(a_input, a_header);
 				}
 
 			protected:
@@ -3067,14 +3173,19 @@ namespace bsa
 						return *this;
 					}
 
-					inline void read(istream_t& a_input)
+					inline void read(istream_t& a_input, const header_t& a_header)
 					{
 						a_input >>
 							last >>
 							last2 >>
 							length >>
-							first >>
-							crc;
+							first;
+
+						if (a_header.xbox_archive()) {
+							a_input >> endian::big >> crc >> endian::little;
+						} else {
+							a_input >> crc;
+						}
 					}
 
 					std::int8_t last;
@@ -3210,12 +3321,6 @@ namespace bsa
 						a_input >>
 							size >>
 							offset;
-					}
-
-					constexpr void byte_swap() noexcept
-					{
-						size = swap_endian(size);
-						offset = swap_endian(offset);
 					}
 
 					std::uint32_t size;
@@ -3363,7 +3468,6 @@ namespace bsa
 
 					inline void read(istream_t& a_input, BSA_MAYBEUNUSED const header_t& a_header)
 					{
-						BSA_MAYBEUNUSED std::uint32_t pad = 0;
 						switch (a_header.version()) {
 						case v103:
 						case v104:
@@ -3373,21 +3477,14 @@ namespace bsa
 							break;
 						case v105:
 
-							a_input >>
-								fileCount >>
-								pad >>
-								fileOffset >>
-								pad;
+							a_input >> fileCount;
+							a_input.seek_rel(4);
+							a_input >> fileOffset;
+							a_input.seek_rel(4);
 							break;
 						default:
 							throw version_error();
 						}
-					}
-
-					constexpr void byte_swap() noexcept
-					{
-						fileCount = swap_endian(fileCount);
-						fileOffset = swap_endian(fileOffset);
 					}
 
 					std::uint32_t fileCount;
@@ -4125,7 +4222,7 @@ namespace bsa
 
 				auto offset = _header.directory_names_length() + _header.directory_count();	 // include prefixed length byte
 				offset += _header.file_count() * detail::file_t::block_size();
-				input.seek_rel(detail::narrow_cast<std::ptrdiff_t>(offset));
+				input.seek_rel(offset);
 
 				if (_header.file_strings()) {
 					for (auto& dir : _dirs) {
@@ -4177,7 +4274,7 @@ namespace bsa
 	namespace fo4  // Fallout 4
 	{
 		using archive_version = std::size_t;
-		static constexpr archive_version v1 = 1;
+		BSA_CXX17_INLINE constexpr archive_version v1 = 1;
 
 
 		namespace detail
