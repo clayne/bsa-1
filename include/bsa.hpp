@@ -34,6 +34,7 @@ namespace bsa
 {
 	namespace stl
 	{
+		using std::add_const_t;
 		using std::conditional_t;
 		using std::enable_if_t;
 		using std::underlying_type_t;
@@ -49,6 +50,9 @@ namespace bsa
 {
 	namespace stl
 	{
+		template <class T>
+		using add_const_t = typename std::add_const<T>::type;
+
 		template <bool B, class T, class F>
 		using conditional_t = typename std::conditional<B, T, F>::type;
 
@@ -56,7 +60,7 @@ namespace bsa
 		using enable_if_t = typename std::enable_if<B, T>::type;
 
 		template <class T>
-		using underlying_type_t = typename underlying_type<T>::type;
+		using underlying_type_t = typename std::underlying_type<T>::type;
 	}
 }
 
@@ -70,7 +74,7 @@ namespace bsa
 #define BSA_CXX17_INLINE inline
 
 #define BSA_FALLTHROUGH [[fallthrough]]
-#define BSA_MAYBEUNUSED [[maybe_unused]]
+#define BSA_MAYBE_UNUSED [[maybe_unused]]
 #define BSA_NODISCARD [[nodiscard]]
 
 #include <filesystem>
@@ -128,7 +132,7 @@ namespace bsa
 #define BSA_CXX17_INLINE static
 
 #define BSA_FALLTHROUGH
-#define BSA_MAYBEUNUSED
+#define BSA_MAYBE_UNUSED
 #define BSA_NODISCARD
 
 #include <boost/filesystem.hpp>
@@ -237,7 +241,7 @@ namespace bsa
 		static constexpr bool is_pointer_v = std::is_pointer<T>::value;
 
 		template <class T>
-		static constexpr bool is_signed_v = is_signed<T>::value;
+		static constexpr bool is_signed_v = std::is_signed<T>::value;
 
 		template <class T>
 		static constexpr bool is_unsigned_v = std::is_unsigned<T>::value;
@@ -252,10 +256,10 @@ namespace bsa
 		};
 
 		template <
-			class IntegerType
-				stl::enable_if_t<
-					stl::is_integral_v<IntegerType>,
-					int> = 0>
+			class IntegerType,
+			stl::enable_if_t<
+				stl::is_integral_v<IntegerType>,
+				int> = 0>
 		constexpr IntegerType to_integer(stl::byte a_byte) noexcept
 		{
 			return static_cast<IntegerType>(a_byte);
@@ -269,6 +273,7 @@ namespace bsa
 #if __cplusplus >= 202002L	// C++20
 
 #include <bit>
+#include <span>
 
 #define BSA_CXX20_CONSTEXPR constexpr
 #define BSA_CXX20_NOEXCEPT noexcept(true)
@@ -279,6 +284,7 @@ namespace bsa
 	{
 		using std::rotl;
 		using std::rotr;
+		using std::span;
 	}
 }
 
@@ -286,6 +292,8 @@ namespace bsa
 
 #define BSA_CXX20_CONSTEXPR inline
 #define BSA_CXX20_NOEXCEPT noexcept(false)
+
+#include <boost/beast/core/span.hpp>
 
 namespace bsa
 {
@@ -333,6 +341,8 @@ namespace bsa
 				return (a_val >> rot) | (a_val << (N - rot));
 			}
 		}
+
+		using boost::beast::span;
 	}
 }
 
@@ -384,6 +394,9 @@ namespace bsa
 {
 	class exception : public std::exception
 	{
+	private:
+		using super = std::exception;
+
 	public:
 		inline exception() noexcept :
 			exception("base archive exception")
@@ -393,7 +406,7 @@ namespace bsa
 		inline exception(exception&&) = default;
 
 		inline exception(const char* a_what) noexcept :
-			std::exception(),
+			super(),
 			_what(a_what)
 		{}
 
@@ -412,6 +425,9 @@ namespace bsa
 	// typically thrown when converting from std::size_t to std::uint32_t/std::int32_t for writes
 	class size_error : public exception
 	{
+	private:
+		using super = exception;
+
 	public:
 		inline size_error() noexcept :
 			size_error("an integer was larger than what a field could hold")
@@ -421,7 +437,7 @@ namespace bsa
 		inline size_error(size_error&&) = default;
 
 		inline size_error(const char* a_what) noexcept :
-			exception(a_what)
+			super(a_what)
 		{}
 
 		~size_error() = default;
@@ -433,6 +449,9 @@ namespace bsa
 
 	class hash_error : public exception
 	{
+	private:
+		using super = exception;
+
 	public:
 		inline hash_error() noexcept :
 			hash_error("encountered an error during hash generation")
@@ -442,7 +461,7 @@ namespace bsa
 		inline hash_error(hash_error&&) = default;
 
 		inline hash_error(const char* a_what) noexcept :
-			exception(a_what)
+			super(a_what)
 		{}
 
 		~hash_error() = default;
@@ -457,6 +476,9 @@ namespace bsa
 	// is possibly the most bethesda thing they could do
 	class hash_non_ascii : public hash_error
 	{
+	private:
+		using super = hash_error;
+
 	public:
 		inline hash_non_ascii() noexcept :
 			hash_non_ascii("encountered a non ascii character during hash generation")
@@ -466,7 +488,7 @@ namespace bsa
 		inline hash_non_ascii(hash_non_ascii&&) = default;
 
 		inline hash_non_ascii(const char* a_what) noexcept :
-			hash_error(a_what)
+			super(a_what)
 		{}
 
 		~hash_non_ascii() = default;
@@ -478,6 +500,9 @@ namespace bsa
 
 	class hash_empty : public hash_error
 	{
+	private:
+		using super = hash_error;
+
 	public:
 		inline hash_empty() noexcept :
 			hash_empty("the given path was empty")
@@ -487,7 +512,7 @@ namespace bsa
 		inline hash_empty(hash_empty&&) = default;
 
 		inline hash_empty(const char* a_what) noexcept :
-			hash_error(a_what)
+			super(a_what)
 		{}
 
 		~hash_empty() = default;
@@ -499,6 +524,9 @@ namespace bsa
 
 	class io_error : public exception
 	{
+	private:
+		using super = exception;
+
 	public:
 		inline io_error() noexcept :
 			io_error("failure while performing i/o with the archive")
@@ -508,7 +536,7 @@ namespace bsa
 		inline io_error(io_error&&) = default;
 
 		inline io_error(const char* a_what) noexcept :
-			exception(a_what)
+			super(a_what)
 		{}
 
 		~io_error() = default;
@@ -520,6 +548,9 @@ namespace bsa
 
 	class input_error : public io_error
 	{
+	private:
+		using super = io_error;
+
 	public:
 		inline input_error() noexcept :
 			input_error("failure while performing input")
@@ -529,7 +560,7 @@ namespace bsa
 		inline input_error(input_error&&) = default;
 
 		inline input_error(const char* a_what) noexcept :
-			io_error(a_what)
+			super(a_what)
 		{}
 
 		~input_error() = default;
@@ -541,6 +572,9 @@ namespace bsa
 
 	class version_error : public input_error
 	{
+	private:
+		using super = input_error;
+
 	public:
 		inline version_error() noexcept :
 			version_error("encountered unhandled version")
@@ -550,7 +584,7 @@ namespace bsa
 		inline version_error(version_error&&) = default;
 
 		inline version_error(const char* a_what) noexcept :
-			input_error(a_what)
+			super(a_what)
 		{}
 
 		~version_error() = default;
@@ -562,6 +596,9 @@ namespace bsa
 
 	class empty_file : public input_error
 	{
+	private:
+		using super = input_error;
+
 	public:
 		inline empty_file() noexcept :
 			empty_file("file was empty")
@@ -571,7 +608,7 @@ namespace bsa
 		inline empty_file(empty_file&&) = default;
 
 		inline empty_file(const char* a_what) noexcept :
-			input_error(a_what)
+			super(a_what)
 		{}
 
 		~empty_file() = default;
@@ -583,6 +620,9 @@ namespace bsa
 
 	class output_error : public io_error
 	{
+	private:
+		using super = io_error;
+
 	public:
 		inline output_error() noexcept :
 			output_error("failure while performing output")
@@ -592,7 +632,7 @@ namespace bsa
 		inline output_error(output_error&&) = default;
 
 		inline output_error(const char* a_what) noexcept :
-			io_error(a_what)
+			super(a_what)
 		{}
 
 		~output_error() = default;
@@ -857,10 +897,15 @@ namespace bsa
 		class istream_t
 		{
 		public:
-			using stream_type = boost::iostreams::mapped_file;
+			using stream_type = boost::iostreams::mapped_file_source;
 
+			using value_type = const stl::byte;
 			using size_type = std::size_t;
-			using mapmode = typename stream_type::mapmode;
+			using difference_type = std::ptrdiff_t;
+			using pointer = value_type*;
+			using const_pointer = stl::add_const_t<value_type>*;
+			using reference = value_type&;
+			using const_reference = stl::add_const_t<value_type>&;
 
 			inline istream_t() noexcept :
 				_stream(),
@@ -874,7 +919,7 @@ namespace bsa
 				_endian(endian::little)
 			{}
 
-			inline istream_t(istream_t&& a_rhs) noexcept :
+			inline istream_t(istream_t&& a_rhs) :
 				_stream(std::move(a_rhs._stream)),
 				_pos(std::move(a_rhs._pos)),
 				_endian(endian::little)
@@ -1048,8 +1093,8 @@ namespace bsa
 			template <class OutputIt>
 			inline void read(OutputIt a_dst, size_type a_count)
 			{
-				assert(_pos + a_count <= _stream.size());
-				std::copy_n(reinterpret_cast<char*>(ptr(_pos)), a_count, a_dst);
+				assert(_pos + a_count <= size());
+				std::copy_n(reinterpret_cast<const char*>(ptr(_pos)), a_count, a_dst);
 				_pos += a_count;
 			}
 
@@ -1058,7 +1103,7 @@ namespace bsa
 			// seek absolute position
 			inline void seek_abs(size_type a_pos) noexcept
 			{
-				assert(a_pos < _stream.size());
+				assert(a_pos < size());
 				_pos = a_pos;
 			}
 
@@ -1073,7 +1118,7 @@ namespace bsa
 					int> = 0>
 			inline void seek_rel(T a_off) noexcept
 			{
-				assert(_pos + a_off < _stream.size());
+				assert(_pos + a_off < size());
 				_pos += a_off;
 			}
 
@@ -1081,14 +1126,14 @@ namespace bsa
 
 			inline void open(const stl::filesystem::path& a_path)
 			{
-				bool fail = false;
+				auto fail = false;
 				try {
 #if __cplusplus >= 201703L
 					auto path = a_path.string();
 #else
 					auto& path = a_path;
 #endif
-					_stream.open(path, mapmode::readwrite);
+					_stream.open(path);
 				} catch (...) {
 					fail = true;
 				}
@@ -1100,21 +1145,39 @@ namespace bsa
 
 			inline void close() { _stream.close(); }
 
-		private:
-			BSA_NODISCARD inline observer<stl::byte*> data() const
+			BSA_NODISCARD inline size_type size() const noexcept
 			{
-				assert(is_open());
-				return reinterpret_cast<stl::byte*>(_stream.data());
+				try {
+					return _stream.size();
+				} catch (...) {
+					return 0;
+				}
 			}
 
-			BSA_NODISCARD inline observer<stl::byte*> fetch(size_type a_pos) const
+			inline stl::span<value_type> subspan() const { return subspan(size()); }
+			inline stl::span<value_type> subspan(size_type a_count) const { return subspan(_pos, a_count); }
+
+			inline stl::span<value_type> subspan(size_type a_offset, size_type a_count) const
 			{
-				assert(a_pos < _stream.size());
+				assert(a_offset + a_count <= size());
+				return { ptr(a_offset), a_count };
+			}
+
+		private:
+			BSA_NODISCARD inline observer<pointer> data() const
+			{
+				assert(is_open());
+				return reinterpret_cast<pointer>(_stream.data());
+			}
+
+			BSA_NODISCARD inline observer<pointer> fetch(size_type a_pos) const
+			{
+				assert(a_pos < size());
 				return data() + a_pos;
 			}
 
-			BSA_NODISCARD inline observer<stl::byte*> ptr(size_type a_pos) const { return fetch(a_pos); }
-			BSA_NODISCARD inline stl::byte& ref(size_type a_pos) const { return *fetch(a_pos); }
+			BSA_NODISCARD inline observer<pointer> ptr(size_type a_pos) const { return fetch(a_pos); }
+			BSA_NODISCARD inline reference ref(size_type a_pos) const { return *fetch(a_pos); }
 
 			stream_type _stream;
 			size_type _pos;
@@ -1214,6 +1277,54 @@ namespace bsa
 		private:
 			stream_type& _stream;
 			pos_type _beg;
+		};
+
+
+		class BSA_MAYBE_UNUSED restore_point
+		{
+		public:
+			using stream_type = istream_t;
+
+			restore_point() = delete;
+			restore_point(const restore_point&) = delete;
+
+			inline restore_point(restore_point&& a_rhs) noexcept :
+				_stream(std::move(a_rhs._stream)),
+				_pos(std::move(a_rhs._pos))
+			{
+				a_rhs._stream.reset();
+				a_rhs._pos = 0;
+			}
+
+			BSA_CXX17_CONSTEXPR restore_point(stream_type& a_stream) :
+				_stream(stl::in_place, a_stream),
+				_pos(a_stream.tell())
+			{}
+
+			inline ~restore_point()
+			{
+				if (_stream) {
+					_stream->get().seek_abs(_pos);
+				}
+			}
+
+			restore_point& operator=(const restore_point&) = delete;
+
+			constexpr restore_point& operator=(restore_point&& a_rhs) noexcept
+			{
+				if (this != std::addressof(a_rhs)) {
+					_stream = std::move(a_rhs._stream);
+					a_rhs._stream.reset();
+
+					_pos = std::move(a_rhs._pos);
+					a_rhs._pos = 0;
+				}
+				return *this;
+			}
+
+		private:
+			stl::optional<std::reference_wrapper<stream_type>> _stream;
+			std::size_t _pos;
 		};
 	}
 
@@ -1587,8 +1698,8 @@ namespace bsa
 					_hash(),
 					_block(),
 					_name(),
-					_data(stl::nullopt),
-					_input()
+					_data(),
+					_archive(stl::nullopt)
 				{}
 
 				inline file_t(const file_t& a_rhs) :
@@ -1596,7 +1707,7 @@ namespace bsa
 					_block(a_rhs._block),
 					_name(a_rhs._name),
 					_data(a_rhs._data),
-					_input(a_rhs._input)
+					_archive(a_rhs._archive)
 				{}
 
 				inline file_t(file_t&& a_rhs) noexcept :
@@ -1604,23 +1715,15 @@ namespace bsa
 					_block(std::move(a_rhs._block)),
 					_name(std::move(a_rhs._name)),
 					_data(std::move(a_rhs._data)),
-					_input(std::move(a_rhs._input))
-				{}
-
-				inline file_t(istream_t a_input) noexcept :
-					_hash(),
-					_block(),
-					_name(),
-					_data(stl::nullopt),
-					_input(std::move(a_input))
+					_archive(std::move(a_rhs._archive))
 				{}
 
 				inline file_t(stl::string_view a_relativePath) :
 					_hash(),
 					_block(),
 					_name(),
-					_data(stl::nullopt),
-					_input()
+					_data(),
+					_archive(stl::nullopt)
 				{
 					path_t path(a_relativePath);
 					_hash = file_hasher()(path);
@@ -1636,7 +1739,7 @@ namespace bsa
 						_block = a_rhs._block;
 						_name = a_rhs._name;
 						_data = a_rhs._data;
-						_input = a_rhs._input;
+						_archive = a_rhs._archive;
 					}
 					return *this;
 				}
@@ -1648,7 +1751,7 @@ namespace bsa
 						_block = std::move(a_rhs._block);
 						_name = std::move(a_rhs._name);
 						_data = std::move(a_rhs._data);
-						_input = std::move(a_rhs._input);
+						_archive = std::move(a_rhs._archive);
 					}
 					return *this;
 				}
@@ -1665,7 +1768,17 @@ namespace bsa
 
 				BSA_NODISCARD inline const char* c_str() const noexcept { return _name.c_str(); }
 
-				BSA_NODISCARD inline bool empty() const { return !_data && !_input; }
+				BSA_NODISCARD constexpr bool empty() const noexcept
+				{
+					switch (_data.index()) {
+					case iview:
+					case ifile:
+						return false;
+					case inull:
+					default:
+						return true;
+					}
+				}
 
 				BSA_NODISCARD constexpr hash_t hash() const noexcept { return _hash; }
 				BSA_NODISCARD constexpr hash_t& hash_ref() noexcept { return _hash; }
@@ -1680,36 +1793,38 @@ namespace bsa
 				BSA_NODISCARD inline std::string str() const { return _name; }
 				BSA_NODISCARD constexpr const std::string& str_ref() const noexcept { return _name; }
 
-				BSA_NODISCARD inline std::vector<char> get_data() { return _data ? *_data : load_data(); }
-
-				inline void set_data(const char* a_data, std::size_t a_size)
+				BSA_NODISCARD inline stl::span<const stl::byte> get_data()
 				{
-					if (a_size > max_int32) {
-						throw size_error();
-					} else {
-						_block.size = narrow_cast<std::uint32_t>(a_size);
-						_data.emplace(a_data, a_data + a_size);
+					switch (_data.index()) {
+					case iview:
+						return stl::get<iview>(_data);
+					case ifile:
+						return stl::get<ifile>(_data).subspan();
+					case inull:
+					default:
+						return {};
 					}
 				}
 
-				inline void set_data(std::istream& a_input)
+				inline void set_data(stl::span<const stl::byte> a_data)
 				{
-					_data.emplace();
-					while (a_input) {
-						_data->push_back(narrow_cast<char>(a_input.get()));
-					}
-					if (!_data->empty()) {
-						_data->pop_back();	// discard eof
-					}
-
-					if (_data->size() == 0) {
-						_data.reset();
-						throw size_error();
-					} else if (_data->size() > max_int32) {
-						_data.reset();
+					if (a_data.size() > max_int32) {
 						throw size_error();
 					} else {
-						_block.size = narrow_cast<std::uint32_t>(_data->size());
+						_data.emplace<iview>(std::move(a_data));
+						_block.size = narrow_cast<std::uint32_t>(a_data.size());
+						_archive.reset();
+					}
+				}
+
+				inline void set_data(istream_t a_input)
+				{
+					if (a_input.size() > max_int32) {
+						throw size_error();
+					} else {
+						_data.emplace<ifile>(std::move(a_input));
+						_block.size = narrow_cast<std::uint32_t>(a_input.size());
+						_archive.reset();
 					}
 				}
 
@@ -1722,15 +1837,9 @@ namespace bsa
 					}
 				}
 
-				inline void read(istream_t& a_input)
-				{
-					_block.read(a_input);
-				}
+				inline void read(istream_t& a_input) { _block.read(a_input); }
 
-				inline void read_hash(istream_t& a_input)
-				{
-					_hash.read(a_input);
-				}
+				inline void read_hash(istream_t& a_input) { _hash.read(a_input); }
 
 				inline void read_name(istream_t& a_input)
 				{
@@ -1742,14 +1851,25 @@ namespace bsa
 					_name.pop_back();  // discard null terminator
 				}
 
+				inline void read_data(istream_t& a_input)
+				{
+					restore_point p(a_input);
+
+					a_input.seek_rel(offset());
+					_data.emplace<iview>(
+						a_input.subspan(size()));
+
+					_archive.emplace(a_input);
+				}
+
 				inline void extract(std::ofstream& a_file)
 				{
-					auto ssize = narrow_cast<std::streamsize>(size());
-					if (_data) {
-						a_file.write(_data->data(), ssize);
+					const auto data = get_data();
+					if (!data.empty()) {
+						const auto ssize = narrow_cast<std::streamsize>(size());
+						a_file.write(reinterpret_cast<const char*>(data.data()), ssize);
 					} else {
-						auto data = load_data();
-						a_file.write(data.data(), ssize);
+						throw output_error();
 					}
 
 					if (!a_file) {
@@ -1757,26 +1877,21 @@ namespace bsa
 					}
 				}
 
-				inline void write(ostream_t& a_output) const
-				{
-					_block.write(a_output);
-				}
+				inline void write(ostream_t& a_output) const { _block.write(a_output); }
 
 				inline void write_data(ostream_t& a_output)
 				{
-					auto ssize = narrow_cast<std::streamsize>(size());
-					if (_data) {
-						a_output.write(_data->data(), ssize);
+					const auto ssize = narrow_cast<std::streamsize>(size());
+					const auto data = get_data();
+					if (!data.empty()) {
+						// TODO: stronger output wrapper
+						a_output.write(reinterpret_cast<const char*>(data.data()), ssize);
 					} else {
-						auto data = load_data();
-						a_output.write(data.data(), ssize);
+						throw output_error();
 					}
 				}
 
-				inline void write_hash(ostream_t& a_output) const
-				{
-					_hash.write(a_output);
-				}
+				inline void write_hash(ostream_t& a_output) const { _hash.write(a_output); }
 
 				inline void write_name(ostream_t& a_output) const
 				{
@@ -1784,6 +1899,13 @@ namespace bsa
 				}
 
 			private:
+				enum : std::size_t
+				{
+					inull,
+					iview,
+					ifile
+				};
+
 				struct block_t
 				{
 					constexpr block_t() noexcept :
@@ -1839,24 +1961,11 @@ namespace bsa
 					std::uint32_t offset;
 				};
 
-				// TODO: return pointer
-				inline std::vector<char> load_data()
-				{
-					const auto pos = _input.tell();
-					_input.seek_rel(offset());
-
-					std::vector<char> data(size(), '\0');
-					_input.read(data.data(), size());
-
-					_input.seek_abs(pos);
-					return data;
-				}
-
 				hash_t _hash;
 				block_t _block;
 				std::string _name;
-				stl::optional<std::vector<char>> _data;
-				istream_t _input;
+				stl::variant<stl::monostate, stl::span<const stl::byte>, istream_t> _data;
+				stl::optional<istream_t> _archive;
 			};
 			using file_ptr = std::shared_ptr<file_t>;
 		}
@@ -1933,17 +2042,16 @@ namespace bsa
 				_impl(std::move(a_rhs._impl))
 			{}
 
-			inline file(stl::string_view a_relativePath, stl::filesystem::path a_filePath) :
-				_impl(nullptr)
+			inline file(stl::string_view a_relativePath, const stl::filesystem::path& a_filePath) :
+				_impl(std::make_shared<detail::file_t>(a_relativePath))
 			{
-				_impl = std::make_shared<detail::file_t>(a_relativePath);
 				open_and_pack(a_filePath);
 			}
 
-			inline file(stl::string_view a_relativePath, std::istream& a_stream) :
+			inline file(stl::string_view a_relativePath, stl::span<const stl::byte> a_data) :
 				_impl(std::make_shared<detail::file_t>(a_relativePath))
 			{
-				_impl->set_data(a_stream);
+				_impl->set_data(std::move(a_data));
 			}
 
 			~file() = default;
@@ -2001,13 +2109,13 @@ namespace bsa
 				return _impl->c_str();
 			}
 
-			BSA_NODISCARD inline bool empty() const
+			BSA_NODISCARD inline bool empty() const noexcept
 			{
 				assert(exists());
 				return _impl->empty();
 			}
 
-			BSA_NODISCARD inline std::vector<char> extract() const
+			BSA_NODISCARD inline stl::span<const stl::byte> extract() const
 			{
 				assert(exists());
 				return _impl->get_data();
@@ -2034,25 +2142,19 @@ namespace bsa
 			BSA_NODISCARD inline hash hash_value() const noexcept
 			{
 				assert(exists());
-				return hash(_impl->hash_ref());
+				return hash{ _impl->hash_ref() };
 			}
 
-			inline void pack(const char* a_data, std::size_t a_size)
+			inline void pack(stl::span<const stl::byte> a_data)
 			{
 				assert(exists());
-				_impl->set_data(a_data, a_size);
+				_impl->set_data(std::move(a_data));
 			}
 
-			inline void pack(stl::filesystem::path a_path)
+			inline void pack(const stl::filesystem::path& a_path)
 			{
 				assert(exists());
 				open_and_pack(a_path);
-			}
-
-			inline void pack(std::istream& a_stream)
-			{
-				assert(exists());
-				_impl->set_data(a_stream);
 			}
 
 			BSA_NODISCARD inline std::size_t size() const noexcept
@@ -2083,9 +2185,8 @@ namespace bsa
 		private:
 			inline void open_and_pack(const stl::filesystem::path& a_path)
 			{
-				std::ifstream input(a_path.c_str(), std::ios_base::in | std::ios_base::binary);
-				input.exceptions(std::ios_base::badbit);
-				_impl->set_data(input);
+				detail::istream_t input{ a_path };
+				_impl->set_data(std::move(input));
 			}
 
 			value_type _impl;
@@ -2210,21 +2311,25 @@ namespace bsa
 
 			inline archive() noexcept :
 				_files(),
+				_filesByName(),
 				_header()
 			{}
 
 			inline archive(const archive& a_rhs) :
 				_files(a_rhs._files),
+				_filesByName(a_rhs._filesByName),
 				_header(a_rhs._header)
 			{}
 
 			inline archive(archive&& a_rhs) noexcept :
 				_files(std::move(a_rhs._files)),
+				_filesByName(std::move(a_rhs._filesByName)),
 				_header(std::move(a_rhs._header))
 			{}
 
 			inline archive(const stl::filesystem::path& a_path) :
 				_files(),
+				_filesByName(),
 				_header()
 			{
 				read(a_path);
@@ -2236,6 +2341,7 @@ namespace bsa
 			{
 				if (this != std::addressof(a_rhs)) {
 					_files = a_rhs._files;
+					_filesByName = a_rhs._filesByName;
 					_header = a_rhs._header;
 				}
 				return *this;
@@ -2245,6 +2351,7 @@ namespace bsa
 			{
 				if (this != std::addressof(a_rhs)) {
 					_files = std::move(a_rhs._files);
+					_filesByName = std::move(a_rhs._filesByName);
 					_header = std::move(a_rhs._header);
 				}
 				return *this;
@@ -2324,7 +2431,7 @@ namespace bsa
 				read_initial(input);
 				read_filenames(input);
 				read_hashes(input);
-				read_data(input);  // important this happens last
+				read_data(input);
 
 				sort();
 
@@ -2339,7 +2446,7 @@ namespace bsa
 
 				stl::filesystem::path filePath;
 				std::ofstream output;
-				for (auto& file : _files) {
+				for (auto& file : _filesByName) {
 					output.close();
 					filePath = a_path / file->str_ref();
 					stl::filesystem::create_directories(filePath.parent_path());
@@ -2423,7 +2530,7 @@ namespace bsa
 				auto newEnd = std::unique(
 					toInsert.begin(),
 					toInsert.end(),
-					[](const value_t& a_lhs, const value_t& a_rhs) -> bool {
+					[](const value_t& a_lhs, const value_t& a_rhs) noexcept -> bool {
 						return a_lhs->hash_ref() == a_rhs->hash_ref();
 					});
 				toInsert.erase(newEnd, toInsert.end());
@@ -2631,14 +2738,14 @@ namespace bsa
 
 			BSA_NODISCARD inline bool validate_data_offsets(const value_t& a_file)
 			{
-				return validate_offsets(_filesByName, a_file, file_name_sorter(), [](const value_t& a_val) -> std::size_t {
+				return validate_offsets(_filesByName, a_file, file_name_sorter(), [](const value_t& a_val) noexcept -> std::size_t {
 					return a_val->size();
 				});
 			}
 
 			BSA_NODISCARD inline bool validate_data_offsets(const container_t& a_files)
 			{
-				return validate_offsets(a_files, [](const value_t& a_val) -> std::size_t {
+				return validate_offsets(a_files, [](const value_t& a_val) noexcept -> std::size_t {
 					return a_val->size();
 				});
 			}
@@ -2728,12 +2835,16 @@ namespace bsa
 				_filesByName.push_back(std::move(a_val));
 			}
 
-			inline void read_data(detail::istream_t& a_input) noexcept
+			inline void read_data(detail::istream_t& a_input)
 			{
 				auto pos = _header.hash_offset();
 				pos += detail::header_t::block_size();
 				pos += detail::hash_t::block_size() * file_count();
 				a_input.seek_beg(pos);
+
+				for (auto& file : _files) {
+					file->read_data(a_input);
+				}
 			}
 
 			inline void read_filenames(detail::istream_t& a_input)
@@ -2765,7 +2876,7 @@ namespace bsa
 			{
 				reserve(file_count());
 				for (std::size_t i = 0; i < file_count(); ++i) {
-					auto file = std::make_shared<detail::file_t>(a_input);
+					auto file = std::make_shared<detail::file_t>();
 					file->read(a_input);
 					push_back(std::move(file));
 				}
@@ -3466,7 +3577,7 @@ namespace bsa
 						return *this;
 					}
 
-					inline void read(istream_t& a_input, BSA_MAYBEUNUSED const header_t& a_header)
+					inline void read(istream_t& a_input, const header_t& a_header)
 					{
 						switch (a_header.version()) {
 						case v103:
@@ -3495,7 +3606,7 @@ namespace bsa
 
 				inline void read_extra(istream_t& a_input, const header_t& a_header)
 				{
-					const auto pos = a_input.tell();
+					restore_point p(a_input);
 					a_input.seek_beg(file_offset() - a_header.file_names_length());
 
 					if (a_header.directory_strings()) {
@@ -3513,8 +3624,6 @@ namespace bsa
 						file->read(a_input, a_header);
 						_files.push_back(std::move(file));
 					}
-
-					a_input.seek_abs(pos);
 				}
 
 				hash_t _hash;
@@ -4067,7 +4176,7 @@ namespace bsa
 			}
 
 			// postfix
-			BSA_NODISCARD inline directory_iterator operator++(BSA_MAYBEUNUSED int)
+			BSA_NODISCARD inline directory_iterator operator++(int)
 			{
 				auto tmp = *this;
 				++*this;
