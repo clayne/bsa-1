@@ -2202,7 +2202,7 @@ namespace bsa
 			using pointer = value_type*;
 			using iterator_category = std::input_iterator_tag;
 
-			inline file_iterator() noexcept :
+			constexpr file_iterator() noexcept :
 				_files(nullptr),
 				_pos(NPOS)
 			{}
@@ -2240,8 +2240,20 @@ namespace bsa
 				return *this;
 			}
 
-			BSA_NODISCARD friend inline bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return a_lhs._files == a_rhs._files && a_lhs._pos == a_rhs._pos; }
-			BSA_NODISCARD friend inline bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+			BSA_NODISCARD friend inline bool operator==(
+				const file_iterator& a_lhs,
+				const file_iterator& a_rhs) noexcept
+			{
+				return a_lhs._files == a_rhs._files &&
+					   a_lhs._pos == a_rhs._pos;
+			}
+
+			BSA_NODISCARD friend inline bool operator!=(
+				const file_iterator& a_lhs,
+				const file_iterator& a_rhs) noexcept
+			{
+				return !(a_lhs == a_rhs);
+			}
 
 			BSA_NODISCARD inline reference operator*() noexcept { return fetch(); }
 			BSA_NODISCARD inline pointer operator->() noexcept { return std::addressof(fetch()); }
@@ -2277,7 +2289,9 @@ namespace bsa
 					_files = std::make_shared<container_type>();
 					_pos = 0;
 					do {
-						_files->push_back(value_type(static_cast<const detail::file_ptr&>(*a_first)));
+						_files->push_back(
+							value_type(
+								static_cast<const detail::file_ptr&>(*a_first)));
 						++a_first;
 					} while (a_first != a_last);
 				}
@@ -2286,7 +2300,11 @@ namespace bsa
 		private:
 			using container_type = std::vector<value_type>;
 
-			inline reference fetch() noexcept { return (*_files)[_pos]; }
+			BSA_NODISCARD inline reference fetch() noexcept
+			{
+				assert(_files);
+				return (*_files)[_pos];
+			}
 
 			static constexpr auto NPOS = (std::numeric_limits<std::size_t>::max)();
 
@@ -2949,7 +2967,6 @@ namespace bsa
 		BSA_CXX17_INLINE constexpr archive_flag embedded_file_names_bit = 1 << 8;
 		BSA_CXX17_INLINE constexpr archive_flag xbox_compressed_bit = 1 << 9;
 
-
 		using archive_type = std::uint16_t;	 // ARCHIVE_TYPE_INDEX
 		BSA_CXX17_INLINE constexpr archive_type meshesbit = 1 << 0;
 		BSA_CXX17_INLINE constexpr archive_type texturesbit = 1 << 1;
@@ -3025,6 +3042,28 @@ namespace bsa
 				BSA_NODISCARD constexpr archive_type types() const noexcept { return archive_type{ _block.archiveTypes }; }
 				BSA_NODISCARD constexpr archive_version version() const noexcept { return archive_version{ _block.version }; }
 
+				constexpr archive_flag flags(archive_flag a_flags) noexcept
+				{
+					assert((a_flags >> 10) == 0);  // all flags?
+					auto old = flags();
+					_block.flags = a_flags;
+					return old;
+				}
+
+				constexpr archive_type types(archive_type a_types) noexcept
+				{
+					assert((a_types >> 9) == 0);
+					auto old = types();
+					_block.archiveTypes = a_types;
+					return old;
+				}
+
+				constexpr void version(archive_version a_version) noexcept
+				{
+					assert(a_version == v103 || a_version == v104 || a_version == v105);
+					_block.version = narrow_cast<std::uint32_t>(a_version);
+				}
+
 				BSA_NODISCARD constexpr bool compressed() const noexcept { return (flags() & compressed_bit) != 0; }
 				BSA_NODISCARD constexpr bool directory_strings() const noexcept { return (flags() & directory_strings_bit) != 0; }
 				BSA_NODISCARD constexpr bool embedded_file_names() const noexcept { return (flags() & embedded_file_names_bit) != 0; }
@@ -3036,6 +3075,17 @@ namespace bsa
 				BSA_NODISCARD constexpr bool xbox_archive() const noexcept { return (flags() & xbox_archive_bit) != 0; }
 				BSA_NODISCARD constexpr bool xbox_compressed() const noexcept { return (flags() & xbox_compressed_bit) != 0; }
 
+				constexpr bool compressed(bool a_set) noexcept { return set_flags(a_set, compressed_bit); }
+				constexpr bool directory_strings(bool a_set) noexcept { return set_flags(a_set, directory_strings_bit); }
+				constexpr bool embedded_file_names(bool a_set) noexcept { return set_flags(a_set, embedded_file_names_bit); }
+				constexpr bool file_strings(bool a_set) noexcept { return set_flags(a_set, file_strings_bit); }
+				constexpr bool retain_directory_names(bool a_set) noexcept { return set_flags(a_set, retain_directory_names_bit); }
+				constexpr bool retain_file_names(bool a_set) noexcept { return set_flags(a_set, retain_file_names_bit); }
+				constexpr bool retain_file_name_offsets(bool a_set) noexcept { return set_flags(a_set, retain_file_name_offsets_bit); }
+				constexpr bool retain_strings_during_startup(bool a_set) noexcept { return set_flags(a_set, retain_strings_during_startup_bit); }
+				constexpr bool xbox_archive(bool a_set) noexcept { return set_flags(a_set, xbox_archive_bit); }
+				constexpr bool xbox_compressed(bool a_set) noexcept { return set_flags(a_set, xbox_compressed_bit); }
+
 				BSA_NODISCARD constexpr bool fonts() const noexcept { return (types() & fontsbit) != 0; }
 				BSA_NODISCARD constexpr bool meshes() const noexcept { return (types() & meshesbit) != 0; }
 				BSA_NODISCARD constexpr bool menus() const noexcept { return (types() & menusbit) != 0; }
@@ -3045,6 +3095,16 @@ namespace bsa
 				BSA_NODISCARD constexpr bool textures() const noexcept { return (types() & texturesbit) != 0; }
 				BSA_NODISCARD constexpr bool trees() const noexcept { return (types() & treesbit) != 0; }
 				BSA_NODISCARD constexpr bool voices() const noexcept { return (types() & voicesbit) != 0; }
+
+				constexpr bool fonts(bool a_set) noexcept { return set_types(a_set, fontsbit); }
+				constexpr bool meshes(bool a_set) noexcept { return set_types(a_set, meshesbit); }
+				constexpr bool menus(bool a_set) noexcept { return set_types(a_set, menusbit); }
+				constexpr bool misc(bool a_set) noexcept { return set_types(a_set, miscbit); }
+				constexpr bool shaders(bool a_set) noexcept { return set_types(a_set, shadersbit); }
+				constexpr bool sounds(bool a_set) noexcept { return set_types(a_set, soundsbit); }
+				constexpr bool textures(bool a_set) noexcept { return set_types(a_set, texturesbit); }
+				constexpr bool trees(bool a_set) noexcept { return set_types(a_set, treesbit); }
+				constexpr bool voices(bool a_set) noexcept { return set_types(a_set, voicesbit); }
 
 				constexpr void clear() noexcept { _block = block_t(); }
 
@@ -3063,7 +3123,7 @@ namespace bsa
 						tag{ '\0', '\0', '\0', '\0' },
 						version(0),
 						headerSize(0),
-						flags(0),
+						flags(0),  // TODO: gotchas with certain bits?
 						directoryCount(0),
 						fileCount(0),
 						directoryNamesLength(0),
@@ -3155,6 +3215,28 @@ namespace bsa
 					std::uint16_t archiveTypes;
 					//std::uint16_t pad;
 				};
+
+				constexpr bool set_flags(bool a_set, archive_flag a_mask) noexcept
+				{
+					auto old = (flags() & a_mask) == a_mask;
+					if (a_set) {
+						_block.flags |= a_mask;
+					} else {
+						_block.flags &= ~a_mask;
+					}
+					return old;
+				}
+
+				constexpr bool set_types(bool a_set, archive_type a_mask) noexcept
+				{
+					auto old = (types() & a_mask) == a_mask;
+					if (a_set) {
+						_block.flags |= a_mask;
+					} else {
+						_block.flags &= ~a_mask;
+					}
+					return old;
+				}
 
 				static constexpr auto BSA = stl::string_view("BSA\0", 4);
 
@@ -3529,6 +3611,8 @@ namespace bsa
 				BSA_NODISCARD inline iterator end() noexcept { return _files.end(); }
 				BSA_NODISCARD inline const_iterator end() const noexcept { return _files.end(); }
 				BSA_NODISCARD inline const_iterator cend() const noexcept { return _files.cend(); }
+
+				BSA_NODISCARD inline bool empty() const noexcept { return _files.empty(); }
 
 				inline void read(istream_t& a_input, const header_t& a_header)
 				{
@@ -3958,12 +4042,12 @@ namespace bsa
 			using pointer = value_type*;
 			using iterator_category = std::input_iterator_tag;
 
-			inline file_iterator() noexcept :
-				_files(stl::nullopt),
+			constexpr file_iterator() noexcept :
+				_files(nullptr),
 				_pos(NPOS)
 			{}
 
-			inline file_iterator(const file_iterator& a_rhs) :
+			inline file_iterator(const file_iterator& a_rhs) noexcept :
 				_files(a_rhs._files),
 				_pos(a_rhs._pos)
 			{}
@@ -3977,7 +4061,7 @@ namespace bsa
 
 			~file_iterator() = default;
 
-			inline file_iterator& operator=(const file_iterator& a_rhs)
+			inline file_iterator& operator=(const file_iterator& a_rhs) noexcept
 			{
 				if (this != std::addressof(a_rhs)) {
 					_files = a_rhs._files;
@@ -3996,14 +4080,26 @@ namespace bsa
 				return *this;
 			}
 
-			BSA_NODISCARD friend BSA_CXX17_CONSTEXPR bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !a_lhs._files && !a_rhs._files; }
-			BSA_NODISCARD friend BSA_CXX17_CONSTEXPR bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+			BSA_NODISCARD friend inline bool operator==(
+				const file_iterator& a_lhs,
+				const file_iterator& a_rhs) noexcept
+			{
+				return a_lhs._files == a_rhs._files &&
+					   a_lhs._pos == a_rhs._pos;
+			}
+
+			BSA_NODISCARD friend inline bool operator!=(
+				const file_iterator& a_lhs,
+				const file_iterator& a_rhs) noexcept
+			{
+				return !(a_lhs == a_rhs);
+			}
 
 			BSA_NODISCARD inline reference operator*() { return fetch(); }
 			BSA_NODISCARD inline pointer operator->() { return std::addressof(fetch()); }
 
 			// prefix
-			inline file_iterator& operator++()
+			inline file_iterator& operator++() noexcept
 			{
 				++_pos;
 				if (_pos >= _files->size()) {
@@ -4014,45 +4110,51 @@ namespace bsa
 			}
 
 			// postfix
-			BSA_NODISCARD inline file_iterator operator++(int)
+			BSA_NODISCARD inline file_iterator operator++(int) noexcept
 			{
 				auto tmp = *this;
 				++*this;
 				return tmp;
 			}
 
-			friend inline void swap(file_iterator& a_lhs, file_iterator& a_rhs) noexcept
-			{
-				auto tmp = std::move(a_lhs);
-				a_lhs = std::move(a_rhs);
-				a_rhs = std::move(tmp);
-			}
-
 		protected:
 			friend class directory;
 
 			explicit inline file_iterator(detail::directory_ptr a_directory) :
-				_files(stl::in_place),
-				_pos(0)
+				_files(nullptr),
+				_pos(NPOS)
 			{
-				if (a_directory) {
+				if (a_directory && !a_directory->empty()) {
+					_files = std::make_shared<container_type>();
+					_pos = 0;
 					for (auto& file : *a_directory) {
 						_files->push_back(value_type(file));
 					}
-				} else {
-					_files.reset();
-					_pos = NPOS;
 				}
 			}
 
 		private:
-			inline reference fetch() { return _files.value()[_pos]; }
+			using container_type = std::vector<value_type>;
+
+			BSA_NODISCARD inline reference fetch()
+			{
+				assert(_files);
+				return (*_files)[_pos];
+			}
 
 			static constexpr auto NPOS = (std::numeric_limits<std::size_t>::max)();
 
-			stl::optional<std::vector<value_type>> _files;
+			std::shared_ptr<container_type> _files;
 			std::size_t _pos;
 		};
+
+
+		inline void swap(file_iterator& a_lhs, file_iterator& a_rhs) noexcept
+		{
+			auto tmp = std::move(a_lhs);
+			a_lhs = std::move(a_rhs);
+			a_rhs = std::move(tmp);
+		}
 
 
 		class directory
@@ -4098,6 +4200,7 @@ namespace bsa
 			BSA_NODISCARD inline iterator end() const noexcept { return iterator(); }
 
 		protected:
+			friend class archive;
 			friend class directory_iterator;
 
 			using value_type = detail::directory_ptr;
@@ -4120,12 +4223,12 @@ namespace bsa
 			using pointer = value_type*;
 			using iterator_category = std::input_iterator_tag;
 
-			BSA_CXX17_CONSTEXPR directory_iterator() noexcept :
-				_dirs(stl::nullopt),
+			constexpr directory_iterator() noexcept :
+				_dirs(nullptr),
 				_pos(NPOS)
 			{}
 
-			inline directory_iterator(const directory_iterator& a_rhs) :
+			inline directory_iterator(const directory_iterator& a_rhs) noexcept :
 				_dirs(a_rhs._dirs),
 				_pos(a_rhs._pos)
 			{}
@@ -4139,7 +4242,7 @@ namespace bsa
 
 			~directory_iterator() = default;
 
-			inline directory_iterator& operator=(const directory_iterator& a_rhs)
+			inline directory_iterator& operator=(const directory_iterator& a_rhs) noexcept
 			{
 				if (this != std::addressof(a_rhs)) {
 					_dirs = a_rhs._dirs;
@@ -4158,14 +4261,26 @@ namespace bsa
 				return *this;
 			}
 
-			BSA_NODISCARD friend BSA_CXX17_CONSTEXPR bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !a_lhs._dirs && !a_rhs._dirs; }
-			BSA_NODISCARD friend BSA_CXX17_CONSTEXPR bool operator!=(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+			BSA_NODISCARD friend inline bool operator==(
+				const directory_iterator& a_lhs,
+				const directory_iterator& a_rhs) noexcept
+			{
+				return a_lhs._dirs == a_rhs._dirs &&
+					   a_lhs._pos == a_rhs._pos;
+			}
+
+			BSA_NODISCARD friend inline bool operator!=(
+				const directory_iterator& a_lhs,
+				const directory_iterator& a_rhs) noexcept
+			{
+				return !(a_lhs == a_rhs);
+			}
 
 			BSA_NODISCARD inline reference operator*() { return fetch(); }
 			BSA_NODISCARD inline pointer operator->() { return std::addressof(fetch()); }
 
 			// prefix
-			inline directory_iterator& operator++()
+			inline directory_iterator& operator++() noexcept
 			{
 				++_pos;
 				if (_pos >= _dirs->size()) {
@@ -4176,45 +4291,55 @@ namespace bsa
 			}
 
 			// postfix
-			BSA_NODISCARD inline directory_iterator operator++(int)
+			BSA_NODISCARD inline directory_iterator operator++(int) noexcept
 			{
 				auto tmp = *this;
 				++*this;
 				return tmp;
 			}
 
-			friend inline void swap(directory_iterator& a_lhs, directory_iterator& a_rhs) noexcept
-			{
-				auto tmp = std::move(a_lhs);
-				a_lhs = std::move(a_rhs);
-				a_rhs = std::move(tmp);
-			}
-
 		protected:
 			friend class archive;
 
-			explicit inline directory_iterator(const std::vector<detail::directory_ptr>& a_directories) :
-				_dirs(stl::in_place),
-				_pos(0)
+			template <class InputIt>
+			explicit inline directory_iterator(InputIt a_first, InputIt a_last) :
+				_dirs(nullptr),
+				_pos(NPOS)
 			{
-				if (!a_directories.empty()) {
-					for (auto& dir : a_directories) {
-						_dirs->push_back(value_type(dir));
-					}
-				} else {
-					_dirs.reset();
-					_pos = NPOS;
+				if (a_first != a_last) {
+					_dirs = std::make_shared<container_type>();
+					_pos = 0;
+					do {
+						_dirs->push_back(
+							value_type(
+								static_cast<const detail::directory_ptr&>(*a_first)));
+						++a_first;
+					} while (a_first != a_last);
 				}
 			}
 
 		private:
-			inline reference fetch() { return _dirs.value()[_pos]; }
+			using container_type = std::vector<value_type>;
+
+			BSA_NODISCARD inline reference fetch()
+			{
+				assert(_dirs);
+				return (*_dirs)[_pos];
+			}
 
 			static constexpr auto NPOS = (std::numeric_limits<std::size_t>::max)();
 
-			stl::optional<std::vector<value_type>> _dirs;
+			std::shared_ptr<container_type> _dirs;
 			std::size_t _pos;
 		};
+
+
+		inline void swap(directory_iterator& a_lhs, directory_iterator& a_rhs) noexcept
+		{
+			auto tmp = std::move(a_lhs);
+			a_lhs = std::move(a_rhs);
+			a_rhs = std::move(tmp);
+		}
 
 
 		class archive
@@ -4222,7 +4347,6 @@ namespace bsa
 		public:
 			using iterator = directory_iterator;
 			using const_iterator = iterator;
-
 
 			inline archive() noexcept :
 				_dirs(),
@@ -4266,8 +4390,35 @@ namespace bsa
 				return *this;
 			}
 
-			BSA_NODISCARD inline iterator begin() const { return iterator(_dirs); }
+			friend inline archive& operator>>(archive& a_archive, const stl::filesystem::path& a_path)
+			{
+				a_archive.read(a_path);
+				return a_archive;
+			}
+
+			BSA_NODISCARD inline directory front() const noexcept
+			{
+				assert(!empty());
+				return directory(_dirs.front());
+			}
+
+			BSA_NODISCARD inline directory back() const noexcept
+			{
+				assert(!empty());
+				return directory(_dirs.back());
+			}
+
+			BSA_NODISCARD inline iterator begin() const { return iterator(_dirs.begin(), _dirs.end()); }
 			BSA_NODISCARD inline iterator end() const noexcept { return iterator(); }
+
+			BSA_NODISCARD constexpr std::size_t size() const noexcept { return file_count(); }
+			BSA_NODISCARD inline bool empty() const noexcept { return _dirs.size() == 0; }	// TODO: not in terms of size
+
+			inline void clear() noexcept
+			{
+				_dirs.clear();
+				_header.clear();
+			}
 
 			BSA_NODISCARD constexpr std::size_t directory_count() const noexcept { return _header.directory_count(); }
 			BSA_NODISCARD constexpr std::size_t directory_names_length() const noexcept { return _header.directory_names_length(); }
@@ -4278,6 +4429,10 @@ namespace bsa
 			BSA_NODISCARD constexpr stl::string_view tag() const { return _header.tag(); }
 			BSA_NODISCARD constexpr archive_type types() const noexcept { return _header.types(); }
 			BSA_NODISCARD constexpr archive_version version() const noexcept { return _header.version(); }
+
+			constexpr archive_flag flags(archive_flag a_flags) noexcept { return _header.flags(a_flags); }
+			constexpr archive_type types(archive_type a_types) noexcept { return _header.types(a_types); }
+			constexpr void version(archive_version a_version) noexcept { return _header.version(a_version); }
 
 			BSA_NODISCARD constexpr bool compressed() const noexcept { return _header.compressed(); }
 			BSA_NODISCARD constexpr bool directory_strings() const noexcept { return _header.directory_strings(); }
@@ -4290,6 +4445,17 @@ namespace bsa
 			BSA_NODISCARD constexpr bool xbox_archive() const noexcept { return _header.xbox_archive(); }
 			BSA_NODISCARD constexpr bool xbox_compressed() const noexcept { return _header.xbox_compressed(); }
 
+			constexpr bool compressed(bool a_set) noexcept { return _header.compressed(a_set); }
+			constexpr bool directory_strings(bool a_set) noexcept { return _header.directory_strings(a_set); }
+			constexpr bool embedded_file_names(bool a_set) noexcept { return _header.embedded_file_names(a_set); }
+			constexpr bool file_strings(bool a_set) noexcept { return _header.file_strings(a_set); }
+			constexpr bool retain_directory_names(bool a_set) noexcept { return _header.retain_directory_names(a_set); }
+			constexpr bool retain_file_names(bool a_set) noexcept { return _header.retain_file_names(a_set); }
+			constexpr bool retain_file_name_offsets(bool a_set) noexcept { return _header.retain_file_name_offsets(a_set); }
+			constexpr bool retain_strings_during_startup(bool a_set) noexcept { return _header.retain_strings_during_startup(a_set); }
+			constexpr bool xbox_archive(bool a_set) noexcept { return _header.xbox_archive(a_set); }
+			constexpr bool xbox_compressed(bool a_set) noexcept { return _header.xbox_compressed(a_set); }
+
 			BSA_NODISCARD constexpr bool fonts() const noexcept { return _header.fonts(); }
 			BSA_NODISCARD constexpr bool meshes() const noexcept { return _header.meshes(); }
 			BSA_NODISCARD constexpr bool menus() const noexcept { return _header.menus(); }
@@ -4300,11 +4466,15 @@ namespace bsa
 			BSA_NODISCARD constexpr bool trees() const noexcept { return _header.trees(); }
 			BSA_NODISCARD constexpr bool voices() const noexcept { return _header.voices(); }
 
-			inline void clear() noexcept
-			{
-				_dirs.clear();
-				_header.clear();
-			}
+			constexpr bool fonts(bool a_set) noexcept { return _header.fonts(a_set); }
+			constexpr bool meshes(bool a_set) noexcept { return _header.meshes(a_set); }
+			constexpr bool menus(bool a_set) noexcept { return _header.menus(a_set); }
+			constexpr bool misc(bool a_set) noexcept { return _header.misc(a_set); }
+			constexpr bool shaders(bool a_set) noexcept { return _header.shaders(a_set); }
+			constexpr bool sounds(bool a_set) noexcept { return _header.sounds(a_set); }
+			constexpr bool textures(bool a_set) noexcept { return _header.textures(a_set); }
+			constexpr bool trees(bool a_set) noexcept { return _header.trees(a_set); }
+			constexpr bool voices(bool a_set) noexcept { return _header.voices(a_set); }
 
 			inline void read(const stl::filesystem::path& a_path)
 			{
