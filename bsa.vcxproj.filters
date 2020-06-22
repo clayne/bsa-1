@@ -4,13 +4,40 @@
     <Filter Include="include">
       <UniqueIdentifier>{284bcc3d-094f-46d3-b6d0-3a36c7f89fc0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="include\bsa">
+      <UniqueIdentifier>{1e3955bd-547f-4ce1-b825-762ed2eb6a96}</UniqueIdentifier>
+    </Filter>
     <Filter Include="testsuite">
       <UniqueIdentifier>{129b2543-35cc-495a-a0f1-5b68bc73c36a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="include\bsa.hpp">
-      <Filter>include</Filter>
+    <ClInclude Include="include\bsa\bsa.hpp">
+      <Filter>include\bsa</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bsa\common.hpp">
+      <Filter>include\bsa</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bsa\fo3.hpp">
+      <Filter>include\bsa</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bsa\fo4.hpp">
+      <Filter>include\bsa</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bsa\sse.hpp">
+      <Filter>include\bsa</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bsa\stl.hpp">
+      <Filter>include\bsa</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bsa\tes3.hpp">
+      <Filter>include\bsa</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bsa\tes4.hpp">
+      <Filter>include\bsa</Filter>
+    </ClInclude>
+    <ClInclude Include="include\bsa\tes5.hpp">
+      <Filter>include\bsa</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

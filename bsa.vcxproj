@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -23,8 +23,6 @@
     <ProjectGuid>{884A14BB-FEB5-4AFF-9D7F-2FACA8D784EE}</ProjectGuid>
     <RootNamespace>bsa</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <VcpkgTriplet Condition="'$(Platform)'=='Win32'">x86-windows-custom</VcpkgTriplet>
-    <VcpkgTriplet Condition="'$(Platform)'=='x64'">x64-windows-custom</VcpkgTriplet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -87,6 +85,18 @@
     <LinkIncremental>false</LinkIncremental>
     <CodeAnalysisRuleSet>NativeRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <VcpkgUserTriplet>$(VcpkgPlatformTarget)-$(VcpkgOSTarget)-custom</VcpkgUserTriplet>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <VcpkgUserTriplet>$(VcpkgPlatformTarget)-$(VcpkgOSTarget)-custom</VcpkgUserTriplet>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgUserTriplet>$(VcpkgPlatformTarget)-$(VcpkgOSTarget)-custom</VcpkgUserTriplet>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <VcpkgUserTriplet>$(VcpkgPlatformTarget)-$(VcpkgOSTarget)-custom</VcpkgUserTriplet>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>EnableAllWarnings</WarningLevel>
@@ -115,6 +125,7 @@
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <DisableSpecificWarnings>4514;4710;4711;5045</DisableSpecificWarnings>
       <AdditionalOptions>/experimental:external /external:anglebrackets /external:W0 /Zc:externConstexpr /Zc:ternary /Zc:throwingNew /Zc:noexceptTypes /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -164,7 +175,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="include\bsa.hpp" />
+    <ClInclude Include="include\bsa\bsa.hpp" />
+    <ClInclude Include="include\bsa\fo3.hpp" />
+    <ClInclude Include="include\bsa\fo4.hpp" />
+    <ClInclude Include="include\bsa\common.hpp" />
+    <ClInclude Include="include\bsa\sse.hpp" />
+    <ClInclude Include="include\bsa\stl.hpp" />
+    <ClInclude Include="include\bsa\tes3.hpp" />
+    <ClInclude Include="include\bsa\tes4.hpp" />
+    <ClInclude Include="include\bsa\tes5.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="testsuite\main.cpp" />
