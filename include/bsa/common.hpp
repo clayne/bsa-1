@@ -2,6 +2,7 @@
 
 #include "bsa/stl.hpp"
 
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <exception>
@@ -299,18 +300,46 @@ namespace bsa
 
 	namespace detail
 	{
+		// sign extending cast
 		template <
 			class To,
 			class From,
 			stl::enable_if_t<
 				stl::conjunction_v<
-					std::is_integral<To>,
-					std::is_integral<From>>,
+					std::disjunction<
+						std::is_integral<To>,
+						std::is_enum<To>>,
+					std::disjunction<
+						std::is_integral<From>,
+						std::is_enum<From>>>,
 				int> = 0>
-		BSA_NODISCARD constexpr To narrow_cast(From a_from) noexcept
+		BSA_NODISCARD constexpr To sign_extend(From a_from) noexcept
 		{
 			const auto to = static_cast<To>(a_from);
 			assert(static_cast<From>(to) == a_from);
+			return to;
+		}
+
+
+		// zero extending cast
+		template <
+			class To,
+			class From,
+			stl::enable_if_t<
+				stl::conjunction_v<
+					std::disjunction<
+						std::is_integral<To>,
+						std::is_enum<To>>,
+					std::disjunction<
+						std::is_integral<From>,
+						std::is_enum<From>>>,
+				int> = 0>
+		BSA_NODISCARD constexpr To zero_extend(From a_from) noexcept
+		{
+			const auto to =
+				static_cast<To>(
+					static_cast<stl::make_unsigned_t<From>>(a_from));
+			assert(static_cast<From>(static_cast<stl::make_unsigned_t<To>>(to)) == a_from);
 			return to;
 		}
 
@@ -392,17 +421,17 @@ namespace bsa
 
 
 		BSA_CXX17_INLINE constexpr auto byte_v{
-			narrow_cast<std::size_t>(
+			zero_extend<std::size_t>(
 				std::numeric_limits<std::uint8_t>::digits)
 		};
 
 		BSA_CXX17_INLINE constexpr auto max_int32{
-			narrow_cast<std::size_t>(
+			zero_extend<std::size_t>(
 				(std::numeric_limits<std::int32_t>::max)())
 		};
 
 		BSA_CXX17_INLINE constexpr auto max_uint32{
-			narrow_cast<std::size_t>(
+			zero_extend<std::size_t>(
 				(std::numeric_limits<std::uint32_t>::max)())
 		};
 
@@ -598,15 +627,15 @@ namespace bsa
 				switch (_endian) {
 				case endian::little:
 					a_value =
-						narrow_cast<std::uint16_t>(
-							ref<std::uint16_t>(_pos++) << 0 * byte_v |
-							ref<std::uint16_t>(_pos++) << 1 * byte_v);
+						zero_extend<std::uint16_t>(
+							ref<std::uint32_t>(_pos++) << 0 * byte_v |
+							ref<std::uint32_t>(_pos++) << 1 * byte_v);
 					break;
 				case endian::big:
 					a_value =
-						narrow_cast<std::uint16_t>(
-							ref<std::uint16_t>(_pos++) << 1 * byte_v |
-							ref<std::uint16_t>(_pos++) << 0 * byte_v);
+						zero_extend<std::uint16_t>(
+							ref<std::uint32_t>(_pos++) << 1 * byte_v |
+							ref<std::uint32_t>(_pos++) << 0 * byte_v);
 					break;
 				default:
 					throw input_error();
@@ -620,7 +649,7 @@ namespace bsa
 				switch (_endian) {
 				case endian::little:
 					a_value =
-						narrow_cast<std::uint32_t>(
+						zero_extend<std::uint32_t>(
 							ref<std::uint32_t>(_pos++) << 0 * byte_v |
 							ref<std::uint32_t>(_pos++) << 1 * byte_v |
 							ref<std::uint32_t>(_pos++) << 2 * byte_v |
@@ -628,7 +657,7 @@ namespace bsa
 					break;
 				case endian::big:
 					a_value =
-						narrow_cast<std::uint32_t>(
+						zero_extend<std::uint32_t>(
 							ref<std::uint32_t>(_pos++) << 3 * byte_v |
 							ref<std::uint32_t>(_pos++) << 2 * byte_v |
 							ref<std::uint32_t>(_pos++) << 1 * byte_v |
@@ -646,7 +675,7 @@ namespace bsa
 				switch (_endian) {
 				case endian::little:
 					a_value =
-						narrow_cast<std::uint64_t>(
+						zero_extend<std::uint64_t>(
 							ref<std::uint64_t>(_pos++) << 0 * byte_v |
 							ref<std::uint64_t>(_pos++) << 1 * byte_v |
 							ref<std::uint64_t>(_pos++) << 2 * byte_v |
@@ -658,7 +687,7 @@ namespace bsa
 					break;
 				case endian::big:
 					a_value =
-						narrow_cast<std::uint64_t>(
+						zero_extend<std::uint64_t>(
 							ref<std::uint64_t>(_pos++) << 7 * byte_v |
 							ref<std::uint64_t>(_pos++) << 6 * byte_v |
 							ref<std::uint64_t>(_pos++) << 5 * byte_v |
@@ -792,7 +821,7 @@ namespace bsa
 					int> = 0>
 			BSA_NODISCARD inline T ref(size_type a_pos) const
 			{
-				return static_cast<T>(ref(a_pos));
+				return zero_extend<T>(ref(a_pos));
 			}
 
 			stream_type _stream;
@@ -833,22 +862,106 @@ namespace bsa
 			ostream_t& operator=(const ostream_t&) = delete;
 			ostream_t& operator=(ostream_t&&) = delete;
 
-			template <
-				class T,
-				stl::enable_if_t<
-					stl::is_integral_v<T>,
-					int> = 0>
-			inline ostream_t& operator<<(T a_value)
+			inline ostream_t& operator<<(std::int8_t a_value)
 			{
-				// TODO
-				_stream.write(reinterpret_cast<char*>(std::addressof(a_value)), sizeof(T));
-				return *this;
+				std::array<char_type, 1> buf;
+				buf[0] = zero_extend<char_type>(a_value);
+				return *this << buf;
+			}
+
+			inline ostream_t& operator<<(std::uint8_t a_value)
+			{
+				std::array<char_type, 1> buf;
+				buf[0] = zero_extend<char_type>(a_value);
+				return *this << buf;
+			}
+
+			inline ostream_t& operator<<(std::uint16_t a_value)
+			{
+				std::array<char_type, 2> buf;
+
+				switch (_endian) {
+				case endian::little:
+					buf[0] = zero_extend<char_type>(zero_extend<std::uint32_t>(a_value) >> 0 * byte_v);
+					buf[1] = zero_extend<char_type>(zero_extend<std::uint32_t>(a_value) >> 1 * byte_v);
+					break;
+				case endian::big:
+					buf[0] = zero_extend<char_type>(zero_extend<std::uint32_t>(a_value) >> 1 * byte_v);
+					buf[1] = zero_extend<char_type>(zero_extend<std::uint32_t>(a_value) >> 0 * byte_v);
+					break;
+				default:
+					throw output_error();
+				}
+
+				return *this << buf;
+			}
+
+			inline ostream_t& operator<<(std::uint32_t a_value)
+			{
+				std::array<char_type, 4> buf;
+
+				switch (_endian) {
+				case endian::little:
+					buf[0] = zero_extend<char_type>(a_value >> 0 * byte_v);
+					buf[1] = zero_extend<char_type>(a_value >> 1 * byte_v);
+					buf[2] = zero_extend<char_type>(a_value >> 2 * byte_v);
+					buf[3] = zero_extend<char_type>(a_value >> 3 * byte_v);
+					break;
+				case endian::big:
+					buf[0] = zero_extend<char_type>(a_value >> 3 * byte_v);
+					buf[1] = zero_extend<char_type>(a_value >> 2 * byte_v);
+					buf[2] = zero_extend<char_type>(a_value >> 1 * byte_v);
+					buf[3] = zero_extend<char_type>(a_value >> 0 * byte_v);
+					break;
+				default:
+					throw output_error();
+				}
+
+				return *this << buf;
+			}
+
+			inline ostream_t& operator<<(std::uint64_t a_value)
+			{
+				std::array<char_type, 4> buf;
+
+				switch (_endian) {
+				case endian::little:
+					buf[0] = zero_extend<char_type>(a_value >> 0 * byte_v);
+					buf[1] = zero_extend<char_type>(a_value >> 1 * byte_v);
+					buf[2] = zero_extend<char_type>(a_value >> 2 * byte_v);
+					buf[3] = zero_extend<char_type>(a_value >> 3 * byte_v);
+					buf[4] = zero_extend<char_type>(a_value >> 4 * byte_v);
+					buf[5] = zero_extend<char_type>(a_value >> 5 * byte_v);
+					buf[6] = zero_extend<char_type>(a_value >> 6 * byte_v);
+					buf[7] = zero_extend<char_type>(a_value >> 7 * byte_v);
+					break;
+				case endian::big:
+					buf[0] = zero_extend<char_type>(a_value >> 7 * byte_v);
+					buf[1] = zero_extend<char_type>(a_value >> 6 * byte_v);
+					buf[2] = zero_extend<char_type>(a_value >> 5 * byte_v);
+					buf[3] = zero_extend<char_type>(a_value >> 4 * byte_v);
+					buf[4] = zero_extend<char_type>(a_value >> 3 * byte_v);
+					buf[5] = zero_extend<char_type>(a_value >> 2 * byte_v);
+					buf[6] = zero_extend<char_type>(a_value >> 1 * byte_v);
+					buf[7] = zero_extend<char_type>(a_value >> 0 * byte_v);
+					break;
+				default:
+					throw output_error();
+				}
+
+				return *this << buf;
 			}
 
 			template <std::size_t N>
-			inline ostream_t& operator<<(std::array<char_type, N>& a_value)
+			inline ostream_t& operator<<(const std::array<char_type, N>& a_value)
 			{
-				return write(a_value.size(), narrow_cast<std::streamsize>(a_value.size()));
+				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
+			}
+
+			constexpr ostream_t& operator<<(endian a_endian) noexcept
+			{
+				_endian = a_endian;
+				return *this;
 			}
 
 			BSA_NODISCARD inline bool operator!() const { return !_stream; }

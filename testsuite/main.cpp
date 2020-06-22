@@ -249,11 +249,14 @@ int main(int, const char*[])
 	//extract_tes3();
 	//repack_tes3();
 	//write_tes3();
-	parse_tes3();
+	//parse_tes3();
 
 	//parse_tes4();
 
 	//parse_fo4();
+
+	bsa::sse::archive archive;
+	archive >> R"(E:\Games\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim - Textures8.bsa)";
 
 #if 0
 	{

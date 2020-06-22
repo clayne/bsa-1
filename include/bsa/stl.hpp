@@ -21,6 +21,7 @@ namespace bsa
 		using std::common_type_t;
 		using std::conditional_t;
 		using std::enable_if_t;
+		using std::make_signed_t;
 		using std::make_unsigned_t;
 		using std::remove_cv_t;
 		using std::underlying_type_t;
@@ -47,6 +48,9 @@ namespace bsa
 
 		template <bool B, class T = void>
 		using enable_if_t = typename std::enable_if<B, T>::type;
+
+		template <class T>
+		using make_signed_t = typename make_signed<T>::type;
 
 		template <class T>
 		using make_unsigned_t = typename make_unsigned<T>::type;
@@ -281,12 +285,16 @@ namespace bsa
 #define BSA_CXX20_CONSTEXPR constexpr
 #define BSA_CXX20_NOEXCEPT noexcept(true)
 
+#define BSA_NO_UNIQUE_ADDRESS [[no_unique_address]]
+
 namespace bsa
 {
 	namespace stl
 	{
 		using std::rotl;
 		using std::rotr;
+		using std::ssize;
+
 		using std::span;
 	}
 }
@@ -296,12 +304,34 @@ namespace bsa
 #define BSA_CXX20_CONSTEXPR inline
 #define BSA_CXX20_NOEXCEPT noexcept(false)
 
+#define BSA_NO_UNIQUE_ADDRESS
+
 #include <boost/beast/core/span.hpp>
 
 namespace bsa
 {
 	namespace stl
 	{
+		namespace detail
+		{
+			template <class, class = void>
+			struct implements_size :
+				std::false_type
+			{};
+
+			template <class T>
+			struct implements_size<
+				T,
+				stl::void_t<
+					decltype(std::declval<T>().size())>> :
+				std::is_integral<
+					decltype(std::declval<T>().size())>
+			{};
+
+			template <class T>
+			inline constexpr bool implements_size_v = implements_size<T>::value;
+		}
+
 		template <class T, stl::enable_if_t<stl::is_unsigned_v<T>, int> = 0>
 		BSA_NODISCARD constexpr T rotl(T a_val, int a_pos) noexcept;
 		template <class T, stl::enable_if_t<stl::is_unsigned_v<T>, int> = 0>
@@ -343,6 +373,29 @@ namespace bsa
 			} else {
 				return (a_val >> rot) | (a_val << (N - rot));
 			}
+		}
+
+		template <
+			class C,
+			stl::enable_if_t<
+				detail::implements_size_v<const C&>,
+				int> = 0>
+		BSA_NODISCARD constexpr auto ssize(const C& a_container)
+			-> stl::common_type_t<
+				std::ptrdiff_t,
+				stl::make_signed_t<decltype(a_container.size())>>
+		{
+			using result_t =
+				stl::common_type_t<
+					std::ptrdiff_t,
+					stl::make_signed_t<decltype(a_container.size())>>;
+			return static_cast<result_t>(a_container.size());
+		}
+
+		template <class T, std::ptrdiff_t N>
+		BSA_NODISCARD constexpr std::ptrdiff_t ssize(const T (&a_array)[N]) noexcept
+		{
+			return N;
 		}
 
 		using boost::beast::span;

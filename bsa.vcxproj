@@ -189,7 +189,7 @@
     <ClCompile Include="testsuite\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="cpp.hint" />
+    <Natvis Include="bsa.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

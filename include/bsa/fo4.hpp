@@ -38,47 +38,26 @@ namespace bsa
 			class header_t
 			{
 			public:
-				constexpr header_t() noexcept :
-					_block()
-				{}
+				constexpr header_t() noexcept = default;
+				constexpr header_t(const header_t&) noexcept = default;
+				constexpr header_t(header_t&&) noexcept = default;
 
-				constexpr header_t(const header_t& a_rhs) noexcept :
-					_block(a_rhs._block)
-				{}
+				~header_t() noexcept = default;
 
-				constexpr header_t(header_t&& a_rhs) noexcept :
-					_block(std::move(a_rhs._block))
-				{}
-
-				~header_t() = default;
-
-				constexpr header_t& operator=(const header_t& a_rhs) noexcept
-				{
-					if (this != std::addressof(a_rhs)) {
-						_block = a_rhs._block;
-					}
-					return *this;
-				}
-
-				constexpr header_t& operator=(header_t&& a_rhs) noexcept
-				{
-					if (this != std::addressof(a_rhs)) {
-						_block = std::move(a_rhs._block);
-					}
-					return *this;
-				}
+				constexpr header_t& operator=(const header_t&) noexcept = default;
+				constexpr header_t& operator=(header_t&&) noexcept = default;
 
 				BSA_NODISCARD static constexpr std::size_t block_size() noexcept { return 0x18; }
 
 				BSA_NODISCARD BSA_CXX17_CONSTEXPR bool directx() const { return format() == DIRECTX; }
 				BSA_NODISCARD BSA_CXX17_CONSTEXPR bool general() const { return format() == GENERAL; }
 
-				BSA_NODISCARD constexpr std::size_t file_count() const noexcept { return narrow_cast<std::size_t>(_block.fileCount); }
+				BSA_NODISCARD constexpr std::size_t file_count() const noexcept { return zero_extend<std::size_t>(_block.fileCount); }
 				BSA_NODISCARD constexpr stl::string_view format() const { return stl::string_view(_block.contentsFormat.data(), _block.contentsFormat.size()); }
 				BSA_NODISCARD constexpr bool has_string_table() const noexcept { return string_table_offset() != 0; }
 				BSA_NODISCARD constexpr stl::string_view magic() const { return stl::string_view(_block.magic.data(), _block.magic.size()); }
 				BSA_NODISCARD constexpr std::uint64_t string_table_offset() const noexcept { return _block.stringTableOffset; }
-				BSA_NODISCARD constexpr archive_version version() const noexcept { return narrow_cast<archive_version>(_block.version); }
+				BSA_NODISCARD constexpr archive_version version() const noexcept { return zero_extend<archive_version>(_block.version); }
 
 				constexpr void clear() noexcept { _block = block_t(); }
 
@@ -101,47 +80,13 @@ namespace bsa
 						stringTableOffset(0)
 					{}
 
-					constexpr block_t(const block_t& a_rhs) noexcept :
-						magic(a_rhs.magic),
-						version(a_rhs.version),
-						contentsFormat(a_rhs.contentsFormat),
-						fileCount(a_rhs.fileCount),
-						stringTableOffset(a_rhs.stringTableOffset)
-					{}
+					constexpr block_t(const block_t&) noexcept = default;
+					constexpr block_t(block_t&&) noexcept = default;
 
-					constexpr block_t(block_t&& a_rhs) noexcept :
-						magic(std::move(a_rhs.magic)),
-						version(std::move(a_rhs.version)),
-						contentsFormat(std::move(a_rhs.contentsFormat)),
-						fileCount(std::move(a_rhs.fileCount)),
-						stringTableOffset(std::move(a_rhs.stringTableOffset))
-					{}
+					~block_t() noexcept = default;
 
-					~block_t() = default;
-
-					constexpr block_t& operator=(const block_t& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							magic = a_rhs.magic;
-							version = a_rhs.version;
-							contentsFormat = a_rhs.contentsFormat;
-							fileCount = a_rhs.fileCount;
-							stringTableOffset = a_rhs.stringTableOffset;
-						}
-						return *this;
-					}
-
-					constexpr block_t& operator=(block_t&& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							magic = std::move(a_rhs.magic);
-							version = std::move(a_rhs.version);
-							contentsFormat = std::move(a_rhs.contentsFormat);
-							fileCount = std::move(a_rhs.fileCount);
-							stringTableOffset = std::move(a_rhs.stringTableOffset);
-						}
-						return *this;
-					}
+					constexpr block_t& operator=(const block_t&) noexcept = default;
+					constexpr block_t& operator=(block_t&&) noexcept = default;
 
 					inline void read(istream_t& a_input)
 					{
@@ -171,35 +116,14 @@ namespace bsa
 			class hash_t
 			{
 			public:
-				constexpr hash_t() noexcept :
-					_block()
-				{}
+				constexpr hash_t() noexcept = default;
+				constexpr hash_t(const hash_t&) noexcept = default;
+				constexpr hash_t(hash_t&&) noexcept = default;
 
-				constexpr hash_t(const hash_t& a_rhs) noexcept :
-					_block(a_rhs._block)
-				{}
+				~hash_t() noexcept = default;
 
-				constexpr hash_t(hash_t&& a_rhs) noexcept :
-					_block(std::move(a_rhs._block))
-				{}
-
-				~hash_t() = default;
-
-				constexpr hash_t& operator=(const hash_t& a_rhs) noexcept
-				{
-					if (this != std::addressof(a_rhs)) {
-						_block = a_rhs._block;
-					}
-					return *this;
-				}
-
-				constexpr hash_t& operator=(hash_t&& a_rhs) noexcept
-				{
-					if (this != std::addressof(a_rhs)) {
-						_block = std::move(a_rhs._block);
-					}
-					return *this;
-				}
+				constexpr hash_t& operator=(const hash_t&) noexcept = default;
+				constexpr hash_t& operator=(hash_t&&) noexcept = default;
 
 				BSA_NODISCARD friend constexpr bool operator==(const hash_t& a_lhs, const hash_t& a_rhs) noexcept
 				{
@@ -235,39 +159,13 @@ namespace bsa
 						dir(0)
 					{}
 
-					constexpr block_t(const block_t& a_rhs) noexcept :
-						file(a_rhs.file),
-						ext(a_rhs.ext),
-						dir(a_rhs.dir)
-					{}
+					constexpr block_t(const block_t&) noexcept = default;
+					constexpr block_t(block_t&&) noexcept = default;
 
-					constexpr block_t(block_t&& a_rhs) noexcept :
-						file(std::move(a_rhs.file)),
-						ext(std::move(a_rhs.ext)),
-						dir(std::move(a_rhs.dir))
-					{}
+					~block_t() noexcept = default;
 
-					~block_t() = default;
-
-					constexpr block_t& operator=(const block_t& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							ext = a_rhs.ext;
-							file = a_rhs.file;
-							dir = a_rhs.dir;
-						}
-						return *this;
-					}
-
-					constexpr block_t& operator=(block_t&& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							ext = std::move(a_rhs.ext);
-							file = std::move(a_rhs.file);
-							dir = std::move(a_rhs.dir);
-						}
-						return *this;
-					}
+					constexpr block_t& operator=(const block_t&) noexcept = default;
+					constexpr block_t& operator=(block_t&&) noexcept = default;
 
 					inline void read(istream_t& a_input)
 					{
@@ -294,52 +192,21 @@ namespace bsa
 			class general_t
 			{
 			public:
-				inline general_t() noexcept :
-					_hash(),
-					_header(),
-					_chunks()
-				{}
-
-				inline general_t(const general_t& a_rhs) :
-					_hash(a_rhs._hash),
-					_header(a_rhs._header),
-					_chunks(a_rhs._chunks)
-				{}
-
-				inline general_t(general_t&& a_rhs) noexcept :
-					_hash(std::move(a_rhs._hash)),
-					_header(std::move(a_rhs._header)),
-					_chunks(std::move(a_rhs._chunks))
-				{}
+				general_t() noexcept = default;
+				general_t(const general_t&) = default;
+				general_t(general_t&&) noexcept = default;
 
 				~general_t() = default;
 
-				inline general_t& operator=(const general_t& a_rhs)
-				{
-					if (this != std::addressof(a_rhs)) {
-						_hash = a_rhs._hash;
-						_header = a_rhs._header;
-						_chunks = a_rhs._chunks;
-					}
-					return *this;
-				}
-
-				inline general_t& operator=(general_t&& a_rhs) noexcept
-				{
-					if (this != std::addressof(a_rhs)) {
-						_hash = std::move(a_rhs._hash);
-						_header = std::move(a_rhs._header);
-						_chunks = std::move(a_rhs._chunks);
-					}
-					return *this;
-				}
+				general_t& operator=(const general_t&) = default;
+				general_t& operator=(general_t&&) noexcept = default;
 
 				BSA_NODISCARD inline const char* c_str() const noexcept { return _name.c_str(); }
 
-				BSA_NODISCARD constexpr std::ptrdiff_t chunk_count() const noexcept { return narrow_cast<std::ptrdiff_t>(_header.chunkCount); }
-				BSA_NODISCARD constexpr std::size_t chunk_offset() const noexcept { return narrow_cast<std::size_t>(_header.chunkOffsetOrType); }
+				BSA_NODISCARD constexpr std::ptrdiff_t chunk_count() const noexcept { return sign_extend<std::ptrdiff_t>(_header.chunkCount); }
+				BSA_NODISCARD constexpr std::size_t chunk_offset() const noexcept { return zero_extend<std::size_t>(_header.chunkOffsetOrType); }
 
-				BSA_NODISCARD constexpr std::ptrdiff_t data_file_index() const noexcept { return narrow_cast<std::ptrdiff_t>(_header.dataFileIndex); }
+				BSA_NODISCARD constexpr std::ptrdiff_t data_file_index() const noexcept { return sign_extend<std::ptrdiff_t>(_header.dataFileIndex); }
 
 				BSA_NODISCARD constexpr hash_t hash() const noexcept { return _hash; }
 				BSA_NODISCARD constexpr hash_t& hash_ref() noexcept { return _hash; }
@@ -353,7 +220,7 @@ namespace bsa
 					_hash.read(a_input);
 					_header.read(a_input);
 					if (chunk_count() > 0) {
-						_chunks.resize(narrow_cast<std::size_t>(chunk_count()));
+						_chunks.resize(zero_extend<std::size_t>(chunk_count()));
 						for (auto& chunk : _chunks) {
 							chunk.read(a_input);
 						}
@@ -377,39 +244,13 @@ namespace bsa
 						chunkOffsetOrType(0)
 					{}
 
-					constexpr header_t(const header_t& a_rhs) noexcept :
-						dataFileIndex(a_rhs.dataFileIndex),
-						chunkCount(a_rhs.chunkCount),
-						chunkOffsetOrType(a_rhs.chunkOffsetOrType)
-					{}
+					constexpr header_t(const header_t&) noexcept = default;
+					constexpr header_t(header_t&&) noexcept = default;
 
-					constexpr header_t(header_t&& a_rhs) noexcept :
-						dataFileIndex(std::move(a_rhs.dataFileIndex)),
-						chunkCount(std::move(a_rhs.chunkCount)),
-						chunkOffsetOrType(std::move(a_rhs.chunkOffsetOrType))
-					{}
+					~header_t() noexcept = default;
 
-					~header_t() = default;
-
-					constexpr header_t& operator=(const header_t& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							dataFileIndex = a_rhs.dataFileIndex;
-							chunkCount = a_rhs.chunkCount;
-							chunkOffsetOrType = a_rhs.chunkOffsetOrType;
-						}
-						return *this;
-					}
-
-					constexpr header_t& operator=(header_t&& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							dataFileIndex = std::move(a_rhs.dataFileIndex);
-							chunkCount = std::move(a_rhs.chunkCount);
-							chunkOffsetOrType = std::move(a_rhs.chunkOffsetOrType);
-						}
-						return *this;
-					}
+					constexpr header_t& operator=(const header_t&) noexcept = default;
+					constexpr header_t& operator=(header_t&&) noexcept = default;
 
 					inline void read(istream_t& a_input)
 					{
@@ -432,39 +273,13 @@ namespace bsa
 						uncompressedSize(0)
 					{}
 
-					constexpr chunk_t(const chunk_t& a_rhs) noexcept :
-						dataFileOffset(a_rhs.dataFileOffset),
-						compressedSize(a_rhs.compressedSize),
-						uncompressedSize(a_rhs.uncompressedSize)
-					{}
+					constexpr chunk_t(const chunk_t&) noexcept = default;
+					constexpr chunk_t(chunk_t&&) noexcept = default;
 
-					constexpr chunk_t(chunk_t&& a_rhs) noexcept :
-						dataFileOffset(std::move(a_rhs.dataFileOffset)),
-						compressedSize(std::move(a_rhs.compressedSize)),
-						uncompressedSize(std::move(a_rhs.uncompressedSize))
-					{}
+					~chunk_t() noexcept = default;
 
-					~chunk_t() = default;
-
-					constexpr chunk_t& operator=(const chunk_t& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							dataFileOffset = a_rhs.dataFileOffset;
-							compressedSize = a_rhs.compressedSize;
-							uncompressedSize = a_rhs.uncompressedSize;
-						}
-						return *this;
-					}
-
-					constexpr chunk_t& operator=(chunk_t&& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							dataFileOffset = std::move(a_rhs.dataFileOffset);
-							compressedSize = std::move(a_rhs.compressedSize);
-							uncompressedSize = std::move(a_rhs.uncompressedSize);
-						}
-						return *this;
-					}
+					constexpr chunk_t& operator=(const chunk_t&) noexcept = default;
+					constexpr chunk_t& operator=(chunk_t&&) noexcept = default;
 
 					inline void read(istream_t& a_input)
 					{
@@ -480,7 +295,7 @@ namespace bsa
 						}
 					}
 
-					static constexpr auto BAADFOOD{ narrow_cast<std::uint32_t>(0xBAADF00D) };
+					static constexpr auto BAADFOOD{ zero_extend<std::uint32_t>(0xBAADF00D) };
 
 					std::uint64_t dataFileOffset;
 					std::uint32_t compressedSize;
@@ -498,79 +313,48 @@ namespace bsa
 			class texture_t
 			{
 			public:
-				inline texture_t() noexcept :
-					_hash(),
-					_header(),
-					_chunks()
-				{}
-
-				inline texture_t(const texture_t& a_rhs) :
-					_hash(a_rhs._hash),
-					_header(a_rhs._header),
-					_chunks(a_rhs._chunks)
-				{}
-
-				inline texture_t(texture_t&& a_rhs) noexcept :
-					_hash(std::move(a_rhs._hash)),
-					_header(std::move(a_rhs._header)),
-					_chunks(std::move(a_rhs._chunks))
-				{}
+				texture_t() noexcept = default;
+				texture_t(const texture_t&) = default;
+				texture_t(texture_t&&) noexcept = default;
 
 				~texture_t() = default;
 
-				inline texture_t& operator=(const texture_t& a_rhs)
-				{
-					if (this != std::addressof(a_rhs)) {
-						_hash = a_rhs._hash;
-						_header = a_rhs._header;
-						_chunks = a_rhs._chunks;
-					}
-					return *this;
-				}
+				texture_t& operator=(const texture_t&) = default;
+				texture_t& operator=(texture_t&&) noexcept = default;
 
-				inline texture_t& operator=(texture_t&& a_rhs) noexcept
-				{
-					if (this != std::addressof(a_rhs)) {
-						_hash = std::move(a_rhs._hash);
-						_header = std::move(a_rhs._header);
-						_chunks = std::move(a_rhs._chunks);
-					}
-					return *this;
-				}
-
-				BSA_NODISCARD constexpr std::ptrdiff_t chunk_count() const noexcept { return narrow_cast<std::ptrdiff_t>(_header.chunkCount); }
-				BSA_NODISCARD constexpr std::size_t chunk_offset() const noexcept { return narrow_cast<std::size_t>(_header.chunkOffset); }
+				BSA_NODISCARD constexpr std::ptrdiff_t chunk_count() const noexcept { return sign_extend<std::ptrdiff_t>(_header.chunkCount); }
+				BSA_NODISCARD constexpr std::size_t chunk_offset() const noexcept { return zero_extend<std::size_t>(_header.chunkOffset); }
 
 				BSA_NODISCARD inline const char* c_str() const noexcept { return _name.c_str(); }
 
-				BSA_NODISCARD constexpr std::ptrdiff_t data_file_index() const noexcept { return narrow_cast<std::ptrdiff_t>(_header.dataFileIndex); }
+				BSA_NODISCARD constexpr std::ptrdiff_t data_file_index() const noexcept { return sign_extend<std::ptrdiff_t>(_header.dataFileIndex); }
 
-				BSA_NODISCARD constexpr std::ptrdiff_t flags() const noexcept { return narrow_cast<std::ptrdiff_t>(_header.flags); }
+				BSA_NODISCARD constexpr std::ptrdiff_t flags() const noexcept { return sign_extend<std::ptrdiff_t>(_header.flags); }
 
-				BSA_NODISCARD constexpr std::ptrdiff_t format() const noexcept { return narrow_cast<std::ptrdiff_t>(_header.format); }
+				BSA_NODISCARD constexpr std::ptrdiff_t format() const noexcept { return sign_extend<std::ptrdiff_t>(_header.format); }
 
-				BSA_NODISCARD constexpr std::size_t height() const noexcept { return narrow_cast<std::size_t>(_header.height); }
+				BSA_NODISCARD constexpr std::size_t height() const noexcept { return zero_extend<std::size_t>(_header.height); }
 
 				BSA_NODISCARD constexpr hash_t hash() const noexcept { return _hash; }
 				BSA_NODISCARD constexpr hash_t& hash_ref() noexcept { return _hash; }
 				BSA_NODISCARD constexpr const hash_t& hash_ref() const noexcept { return _hash; }
 
-				BSA_NODISCARD constexpr std::ptrdiff_t mip_count() const noexcept { return narrow_cast<std::ptrdiff_t>(_header.mipCount); }
+				BSA_NODISCARD constexpr std::ptrdiff_t mip_count() const noexcept { return sign_extend<std::ptrdiff_t>(_header.mipCount); }
 
 				BSA_NODISCARD inline std::string str() const { return _name; }
 				BSA_NODISCARD constexpr std::string& str_ref() noexcept { return _name; }
 				BSA_NODISCARD constexpr const std::string& str_ref() const noexcept { return _name; }
 
-				BSA_NODISCARD constexpr std::ptrdiff_t tile_mode() const noexcept { return narrow_cast<std::ptrdiff_t>(_header.tilemode); }
+				BSA_NODISCARD constexpr std::ptrdiff_t tile_mode() const noexcept { return sign_extend<std::ptrdiff_t>(_header.tilemode); }
 
-				BSA_NODISCARD constexpr std::size_t width() const noexcept { return narrow_cast<std::size_t>(_header.width); }
+				BSA_NODISCARD constexpr std::size_t width() const noexcept { return zero_extend<std::size_t>(_header.width); }
 
 				inline void read(istream_t& a_input)
 				{
 					_hash.read(a_input);
 					_header.read(a_input);
 					if (chunk_count() > 0) {
-						_chunks.resize(narrow_cast<std::size_t>(chunk_count()));
+						_chunks.resize(zero_extend<std::size_t>(chunk_count()));
 						for (auto& chunk : _chunks) {
 							chunk.read(a_input);
 						}
@@ -600,63 +384,13 @@ namespace bsa
 						tilemode(0)
 					{}
 
-					constexpr header_t(const header_t& a_rhs) noexcept :
-						dataFileIndex(a_rhs.dataFileIndex),
-						chunkCount(a_rhs.chunkCount),
-						chunkOffset(a_rhs.chunkOffset),
-						height(a_rhs.height),
-						width(a_rhs.width),
-						mipCount(a_rhs.mipCount),
-						format(a_rhs.format),
-						flags(a_rhs.flags),
-						tilemode(a_rhs.tilemode)
-					{}
+					constexpr header_t(const header_t&) noexcept = default;
+					constexpr header_t(header_t&&) noexcept = default;
 
-					constexpr header_t(header_t&& a_rhs) noexcept :
-						dataFileIndex(std::move(a_rhs.dataFileIndex)),
-						chunkCount(std::move(a_rhs.chunkCount)),
-						chunkOffset(std::move(a_rhs.chunkOffset)),
-						height(std::move(a_rhs.height)),
-						width(std::move(a_rhs.width)),
-						mipCount(std::move(a_rhs.mipCount)),
-						format(std::move(a_rhs.format)),
-						flags(std::move(a_rhs.flags)),
-						tilemode(std::move(a_rhs.tilemode))
-					{}
+					~header_t() noexcept = default;
 
-					~header_t() = default;
-
-					constexpr header_t& operator=(const header_t& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							dataFileIndex = a_rhs.dataFileIndex;
-							chunkCount = a_rhs.chunkCount;
-							chunkOffset = a_rhs.chunkOffset;
-							height = a_rhs.height;
-							width = a_rhs.width;
-							mipCount = a_rhs.mipCount;
-							format = a_rhs.format;
-							flags = a_rhs.flags;
-							tilemode = a_rhs.tilemode;
-						}
-						return *this;
-					}
-
-					constexpr header_t& operator=(header_t&& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							dataFileIndex = std::move(a_rhs.dataFileIndex);
-							chunkCount = std::move(a_rhs.chunkCount);
-							chunkOffset = std::move(a_rhs.chunkOffset);
-							height = std::move(a_rhs.height);
-							width = std::move(a_rhs.width);
-							mipCount = std::move(a_rhs.mipCount);
-							format = std::move(a_rhs.format);
-							flags = std::move(a_rhs.flags);
-							tilemode = std::move(a_rhs.tilemode);
-						}
-						return *this;
-					}
+					constexpr header_t& operator=(const header_t&) noexcept = default;
+					constexpr header_t& operator=(header_t&&) noexcept = default;
 
 					inline void read(istream_t& a_input)
 					{
@@ -694,49 +428,13 @@ namespace bsa
 						sentinel(BAADFOOD)
 					{}
 
-					constexpr chunk_t(const chunk_t& a_rhs) noexcept :
-						dataFileOffset(a_rhs.dataFileOffset),
-						size(a_rhs.size),
-						uncompressedSize(a_rhs.uncompressedSize),
-						mipFirst(a_rhs.mipFirst),
-						mipLast(a_rhs.mipLast),
-						sentinel(BAADFOOD)
-					{}
+					constexpr chunk_t(const chunk_t&) noexcept = default;
+					constexpr chunk_t(chunk_t&&) noexcept = default;
 
-					constexpr chunk_t(chunk_t&& a_rhs) noexcept :
-						dataFileOffset(std::move(a_rhs.dataFileOffset)),
-						size(std::move(a_rhs.size)),
-						uncompressedSize(std::move(a_rhs.uncompressedSize)),
-						mipFirst(std::move(a_rhs.mipFirst)),
-						mipLast(std::move(a_rhs.mipLast)),
-						sentinel(BAADFOOD)
-					{}
+					~chunk_t() noexcept = default;
 
-					~chunk_t() = default;
-
-					constexpr chunk_t& operator=(const chunk_t& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							dataFileOffset = a_rhs.dataFileOffset;
-							size = a_rhs.size;
-							uncompressedSize = a_rhs.uncompressedSize;
-							mipFirst = a_rhs.mipFirst;
-							mipLast = a_rhs.mipLast;
-						}
-						return *this;
-					}
-
-					constexpr chunk_t& operator=(chunk_t&& a_rhs) noexcept
-					{
-						if (this != std::addressof(a_rhs)) {
-							dataFileOffset = std::move(a_rhs.dataFileOffset);
-							size = std::move(a_rhs.size);
-							uncompressedSize = std::move(a_rhs.uncompressedSize);
-							mipFirst = std::move(a_rhs.mipFirst);
-							mipLast = std::move(a_rhs.mipLast);
-						}
-						return *this;
-					}
+					constexpr chunk_t& operator=(const chunk_t&) noexcept = default;
+					constexpr chunk_t& operator=(chunk_t&&) noexcept = default;
 
 					inline void read(istream_t& a_input)
 					{
@@ -753,7 +451,7 @@ namespace bsa
 						}
 					}
 
-					static constexpr auto BAADFOOD{ narrow_cast<std::uint32_t>(0xBAADF00D) };
+					static constexpr auto BAADFOOD{ zero_extend<std::uint32_t>(0xBAADF00D) };
 
 					std::uint64_t dataFileOffset;
 					std::uint32_t size;
@@ -774,12 +472,14 @@ namespace bsa
 			class file_hasher
 			{
 			public:
-				file_hasher() = default;
-				file_hasher(const file_hasher&) = default;
-				file_hasher(file_hasher&&) = default;
+				constexpr file_hasher() noexcept = default;
+				constexpr file_hasher(const file_hasher&) noexcept = default;
+				constexpr file_hasher(file_hasher&&) noexcept = default;
 
-				file_hasher& operator=(const file_hasher&) = default;
-				file_hasher& operator=(file_hasher&&) = default;
+				~file_hasher() noexcept = default;
+
+				constexpr file_hasher& operator=(const file_hasher&) noexcept = default;
+				constexpr file_hasher& operator=(file_hasher&&) noexcept = default;
 
 				BSA_NODISCARD inline hash_t operator()(stl::string_view a_path) const
 				{
@@ -846,7 +546,7 @@ namespace bsa
 				{
 					std::uint32_t hash = 0;
 					for (auto& ch : a_string) {
-						hash = (hash >> 8) ^ CRCTABLE[(hash ^ narrow_cast<std::uint8_t>(ch)) & 0xFF];
+						hash = (hash >> 8) ^ CRCTABLE[(hash ^ zero_extend<std::uint8_t>(ch)) & 0xFF];
 					}
 					return hash;
 				}
@@ -909,31 +609,13 @@ namespace bsa
 		class hash
 		{
 		public:
-			inline hash(const hash& a_rhs) noexcept :
-				_impl(a_rhs._impl)
-			{}
+			hash(const hash&) noexcept = default;
+			hash(hash&&) noexcept = default;
 
-			inline hash(hash&& a_rhs) noexcept :
-				_impl(std::move(a_rhs._impl))
-			{}
+			~hash() noexcept = default;
 
-			~hash() = default;
-
-			inline hash& operator=(const hash& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = a_rhs._impl;
-				}
-				return *this;
-			}
-
-			inline hash& operator=(hash&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = std::move(a_rhs._impl);
-				}
-				return *this;
-			}
+			hash& operator=(const hash&) noexcept = default;
+			hash& operator=(hash&&) noexcept = default;
 
 			BSA_NODISCARD inline std::uint32_t directory_hash() const noexcept { return _impl.get().directory_hash(); }
 			BSA_NODISCARD inline stl::string_view extension() const { return _impl.get().extension(); }
@@ -961,31 +643,13 @@ namespace bsa
 		public:
 			general_file() = delete;
 
-			inline general_file(const general_file& a_rhs) noexcept :
-				_impl(a_rhs._impl)
-			{}
+			general_file(const general_file&) noexcept = default;
+			general_file(general_file&&) noexcept = default;
 
-			inline general_file(general_file&& a_rhs) noexcept :
-				_impl(std::move(a_rhs._impl))
-			{}
+			~general_file() noexcept = default;
 
-			~general_file() = default;
-
-			inline general_file& operator=(const general_file& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = a_rhs._impl;
-				}
-				return *this;
-			}
-
-			inline general_file& operator=(general_file&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = std::move(a_rhs._impl);
-				}
-				return *this;
-			}
+			general_file& operator=(const general_file&) noexcept = default;
+			general_file& operator=(general_file&&) noexcept = default;
 
 			BSA_NODISCARD inline std::ptrdiff_t chunk_count() const noexcept { return _impl->chunk_count(); }
 			BSA_NODISCARD inline const char* c_str() const noexcept { return _impl->c_str(); }
@@ -1011,31 +675,13 @@ namespace bsa
 		public:
 			texture_file() = delete;
 
-			inline texture_file(const texture_file& a_rhs) noexcept :
-				_impl(a_rhs._impl)
-			{}
+			inline texture_file(const texture_file&) noexcept = default;
+			inline texture_file(texture_file&&) noexcept = default;
 
-			inline texture_file(texture_file&& a_rhs) noexcept :
-				_impl(std::move(a_rhs._impl))
-			{}
+			~texture_file() noexcept = default;
 
-			~texture_file() = default;
-
-			inline texture_file& operator=(const texture_file& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = a_rhs._impl;
-				}
-				return *this;
-			}
-
-			inline texture_file& operator=(texture_file&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = std::move(a_rhs._impl);
-				}
-				return *this;
-			}
+			inline texture_file& operator=(const texture_file&) noexcept = default;
+			inline texture_file& operator=(texture_file&&) noexcept = default;
 
 			BSA_NODISCARD inline std::ptrdiff_t chunk_count() const noexcept { return _impl->chunk_count(); }
 			BSA_NODISCARD inline const char* c_str() const noexcept { return _impl->c_str(); }
@@ -1069,17 +715,9 @@ namespace bsa
 			using texture_file_t = texture_file;
 
 		public:
-			constexpr file_entry() noexcept :
-				_impl()
-			{}
-
-			inline file_entry(const file_entry& a_rhs) :
-				_impl(a_rhs._impl)
-			{}
-
-			inline file_entry(file_entry&& a_rhs) noexcept :
-				_impl(std::move(a_rhs._impl))
-			{}
+			constexpr file_entry() noexcept = default;
+			file_entry(const file_entry&) = default;
+			file_entry(file_entry&&) noexcept = default;
 
 			explicit inline file_entry(const general_file& a_rhs) noexcept :
 				_impl(a_rhs)
@@ -1099,21 +737,8 @@ namespace bsa
 
 			~file_entry() = default;
 
-			inline file_entry& operator=(const file_entry& a_rhs)
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = a_rhs._impl;
-				}
-				return *this;
-			}
-
-			inline file_entry& operator=(file_entry&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = std::move(a_rhs._impl);
-				}
-				return *this;
-			}
+			file_entry& operator=(const file_entry&) = default;
+			file_entry& operator=(file_entry&&) noexcept = default;
 
 			BSA_NODISCARD constexpr bool is_general_file() const noexcept { return _impl.index() == igeneral; }
 			BSA_NODISCARD constexpr bool is_texture_file() const noexcept { return _impl.index() == itexture; }
@@ -1173,10 +798,7 @@ namespace bsa
 				_pos(NPOS)
 			{}
 
-			inline file_iterator(const file_iterator& a_rhs) :
-				_files(a_rhs._files),
-				_pos(a_rhs._pos)
-			{}
+			file_iterator(const file_iterator&) = default;
 
 			inline file_iterator(file_iterator&& a_rhs) noexcept :
 				_files(std::move(a_rhs._files)),
@@ -1187,14 +809,7 @@ namespace bsa
 
 			~file_iterator() = default;
 
-			inline file_iterator& operator=(const file_iterator& a_rhs)
-			{
-				if (this != std::addressof(a_rhs)) {
-					_files = a_rhs._files;
-					_pos = a_rhs._pos;
-				}
-				return *this;
-			}
+			file_iterator& operator=(const file_iterator&) = default;
 
 			inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
 			{
@@ -1285,20 +900,9 @@ namespace bsa
 			using iterator = file_iterator;
 			using const_iterator = iterator;
 
-			inline archive() noexcept :
-				_files(),
-				_header()
-			{}
-
-			inline archive(const archive& a_archive) :
-				_files(a_archive._files),
-				_header(a_archive._header)
-			{}
-
-			inline archive(archive&& a_archive) noexcept :
-				_files(std::move(a_archive._files)),
-				_header(std::move(a_archive._header))
-			{}
+			archive() noexcept = default;
+			archive(const archive&) = default;
+			archive(archive&&) noexcept = default;
 
 			inline archive(const stl::filesystem::path& a_path) :
 				_files(),
@@ -1309,21 +913,8 @@ namespace bsa
 
 			~archive() = default;
 
-			inline archive& operator=(const archive& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_header = a_rhs._header;
-				}
-				return *this;
-			}
-
-			inline archive& operator=(archive&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_header = std::move(a_rhs._header);
-				}
-				return *this;
-			}
+			archive& operator=(const archive&) noexcept = default;
+			archive& operator=(archive&&) noexcept = default;
 
 			BSA_NODISCARD inline iterator begin() const
 			{
