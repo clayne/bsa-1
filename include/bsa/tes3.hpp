@@ -412,7 +412,7 @@ namespace bsa
 
 				inline void read_data(istream_t& a_input)
 				{
-					restore_point p(a_input);
+					const restore_point p(a_input);
 
 					a_input.seek_rel(offset());
 					_data.emplace<iview>(
@@ -950,25 +950,25 @@ namespace bsa
 				prepare_for_write();
 
 				_header.write(output);
-				for (auto& file : _files) {
+				for (const auto& file : _files) {
 					file->write(output);
 				}
 
 				std::uint32_t offset = 0;
-				for (auto& file : _files) {
+				for (const auto& file : _files) {
 					output << offset;
 					offset += detail::zero_extend<std::uint32_t>(file->name_size());
 				}
 
-				for (auto& file : _files) {
+				for (const auto& file : _files) {
 					file->write_name(output);
 				}
 
-				for (auto& file : _files) {
+				for (const auto& file : _files) {
 					file->write_hash(output);
 				}
 
-				for (auto& file : _filesByName) {
+				for (const auto& file : _filesByName) {
 					file->write_data(output);
 				}
 			}

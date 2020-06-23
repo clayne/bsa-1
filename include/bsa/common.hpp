@@ -952,8 +952,28 @@ namespace bsa
 				return *this << buf;
 			}
 
+			inline ostream_t& operator<<(char a_value)
+			{
+				return write(std::addressof(a_value), 1);
+			}
+
 			template <std::size_t N>
 			inline ostream_t& operator<<(const std::array<char_type, N>& a_value)
+			{
+				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
+			}
+
+			inline ostream_t& operator<<(stl::span<char_type> a_value)
+			{
+				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
+			}
+
+			inline ostream_t& operator<<(stl::span<const char_type> a_value)
+			{
+				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
+			}
+
+			inline ostream_t& operator<<(stl::basic_string_view<char_type> a_value)
 			{
 				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
 			}

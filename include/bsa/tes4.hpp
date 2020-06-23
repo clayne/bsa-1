@@ -7,7 +7,9 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <fstream>
 #include <functional>
+#include <ios>
 #include <iterator>
 #include <memory>
 #include <ostream>
@@ -210,7 +212,7 @@ namespace bsa
 
 				inline void write(ostream_t& a_output) const
 				{
-					_block.write(a_output);
+					_block.write(a_output, *this);
 				}
 
 			private:
@@ -251,8 +253,20 @@ namespace bsa
 						a_input.seek_rel(2);
 					}
 
-					inline void write(ostream_t& a_output) const
+					inline void write(ostream_t& a_output, const header_t& a_header) const
 					{
+						constexpr std::uint16_t pad = 0;
+
+						const auto myDirectoryNamesLength =
+							a_header.directory_strings() ?
+								directoryNamesLength :
+								0;
+
+						const auto myFileNamesLength =
+							a_header.file_strings() ?
+								fileNamesLength :
+								0;
+
 						a_output
 							<< tag
 							<< version
@@ -260,10 +274,10 @@ namespace bsa
 							<< flags
 							<< directoryCount
 							<< fileCount
-							<< directoryNamesLength
-							<< fileNamesLength
-							<< archiveTypes;
-						a_output.seek_rel(2);
+							<< myDirectoryNamesLength
+							<< myFileNamesLength
+							<< archiveTypes
+							<< pad;
 					}
 
 					std::array<char, 4> tag;
@@ -461,6 +475,15 @@ namespace bsa
 
 				BSA_NODISCARD constexpr std::size_t offset() const noexcept { return zero_extend<std::size_t>(_block.offset); }
 
+				constexpr void offset(std::size_t a_offset)
+				{
+					if (a_offset > max_int32) {
+						throw size_error();
+					} else {
+						_block.offset = zero_extend<std::uint32_t>(a_offset);
+					}
+				}
+
 				BSA_NODISCARD constexpr std::size_t size() const noexcept { return zero_extend<std::size_t>(_block.size); }
 
 				BSA_NODISCARD inline std::string str() const { return _name; }
@@ -519,14 +542,20 @@ namespace bsa
 					_name.pop_back();  // discard null terminator
 				}
 
-				inline void read_data(istream_t& a_input)
+				inline void read_data(istream_t& a_input, const header_t& a_header)
 				{
-					restore_point p(a_input);
+					const restore_point p(a_input);
 
 					a_input.seek_abs(offset());
+
+					if (a_header.embedded_file_names()) {
+						std::uint8_t len = 0;
+						a_input >> len;
+						a_input.seek_rel(len);
+					}
+
 					_data.emplace<iview>(
 						a_input.subspan(size()));
-
 					_archive.emplace(a_input);
 				}
 
@@ -556,8 +585,18 @@ namespace bsa
 					a_output.write(_name.c_str(), sign_extend<std::streamsize>(_name.size() + 1));
 				}
 
-				inline void write_data(ostream_t& a_output) const
+				inline void write_data(ostream_t& a_output, const header_t& a_header, const std::string& a_dirPath) const
 				{
+					if (a_header.embedded_file_names()) {
+						std::size_t length = a_dirPath.length();
+						length += 1;
+						length += _name.length();
+						a_output << zero_extend<std::uint8_t>(length);
+						a_output << stl::string_view{ a_dirPath };
+						a_output << '\\';
+						a_output << stl::string_view{ _name };
+					}
+
 					const auto ssize = sign_extend<std::streamsize>(size());
 					const auto data = get_data();
 					if (!data.empty()) {
@@ -669,6 +708,15 @@ namespace bsa
 				BSA_NODISCARD constexpr std::size_t file_count() const noexcept { return zero_extend<std::size_t>(_block.fileCount); }
 				BSA_NODISCARD constexpr std::size_t file_offset() const noexcept { return zero_extend<std::size_t>(_block.fileOffset); }
 
+				constexpr void file_offset(std::size_t a_offset)
+				{
+					if (a_offset > max_int32) {
+						throw size_error();
+					} else {
+						_block.fileOffset = zero_extend<std::uint32_t>(a_offset);
+					}
+				}
+
 				BSA_NODISCARD constexpr hash_t hash() const noexcept { return _hash; }
 				BSA_NODISCARD constexpr hash_t& hash_ref() noexcept { return _hash; }
 				BSA_NODISCARD constexpr const hash_t& hash_ref() const noexcept { return _hash; }
@@ -701,8 +749,18 @@ namespace bsa
 				{
 					_hash.write(a_output, a_header);
 					_block.write(a_output, a_header);
-					if (a_header.directory_strings() || file_count() > 0) {
-						write_extra(a_output, a_header);
+				}
+
+				inline void write_extra(ostream_t& a_output, const header_t& a_header) const
+				{
+					if (a_header.directory_strings()) {
+						const auto len = name_size();
+						a_output << zero_extend<std::uint8_t>(len);
+						a_output << stl::string_view{ _name.c_str(), len };
+					}
+
+					for (auto& file : _files) {
+						file->write(a_output, a_header);
 					}
 				}
 
@@ -770,11 +828,10 @@ namespace bsa
 
 				inline void read_extra(istream_t& a_input, const header_t& a_header)
 				{
-					restore_point p(a_input);
+					const restore_point p(a_input);
 					a_input.seek_beg(file_offset() - a_header.file_names_length());
 
 					if (a_header.directory_strings()) {
-						// bzstring
 						std::uint8_t length;
 						a_input >> length;
 						const auto xLength = zero_extend<std::size_t>(length) - 1;	// skip null terminator
@@ -790,14 +847,9 @@ namespace bsa
 					}
 				}
 
-				inline void write_extra(ostream_t& a_output, const header_t& a_header) const
-				{
-					// TODO: finish
-				}
-
 				hash_t _hash;
 				block_t _block;
-				std::string _name;
+				std::string _name;	// bzstring
 				container_type _files;
 			};
 			using directory_ptr = std::shared_ptr<directory_t>;
@@ -1512,6 +1564,51 @@ namespace bsa
 				assert(sanity_check());
 			}
 
+			inline void write(const stl::filesystem::path& a_path)
+			{
+				std::ofstream file(a_path.c_str(), std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
+				if (!file.is_open()) {
+					throw output_error();
+				} else {
+					write(file);
+				}
+			}
+
+			inline void write(std::ostream& a_output)
+			{
+				detail::ostream_t output(a_output);
+
+				prepare_for_write();
+
+				_header.write(output);
+
+				for (const auto& dir : _dirs) {
+					dir->write(output, _header);
+				}
+
+				for (const auto& dir : _dirs) {
+					dir->write_extra(output, _header);
+				}
+
+				for (const auto& dir : _dirs) {
+					for (const auto& file : *dir) {
+						file->write(output, _header);
+					}
+				}
+
+				for (const auto& dir : _dirs) {
+					for (const auto& file : *dir) {
+						file->write_name(output);
+					}
+				}
+
+				for (const auto& dir : _dirs) {
+					for (const auto& file : *dir) {
+						file->write_data(output, _header, dir->str_ref());
+					}
+				}
+			}
+
 		private:
 			using value_t = detail::directory_ptr;
 			using container_t = std::vector<value_t>;
@@ -1540,24 +1637,45 @@ namespace bsa
 				return it != _dirs.end() && (*it)->hash_ref() == a_hash ? it : itEnd;
 			}
 
-			BSA_NODISCARD std::size_t calc_file_count() const
+			BSA_NODISCARD inline std::size_t calc_directory_count() const noexcept
+			{
+				return _dirs.size();
+			}
+
+			BSA_NODISCARD inline std::size_t calc_directory_names_length() const noexcept
+			{
+				std::size_t length = 0;
+				for (const auto& dir : _dirs) {
+					length += dir->name_size();
+				}
+				return length;
+			}
+
+			BSA_NODISCARD inline std::size_t calc_file_count() const noexcept
 			{
 				std::size_t count = 0;
-				for (auto& dir : _dirs) {
+				for (const auto& dir : _dirs) {
 					count += dir->file_count();
 				}
 				return count;
 			}
 
-			BSA_NODISCARD std::size_t calc_file_names_length() const
+			BSA_NODISCARD inline std::size_t calc_file_names_length() const noexcept
 			{
 				std::size_t length = 0;
-				for (auto& dir : _dirs) {
-					for (auto& file : *dir) {
+				for (const auto& dir : _dirs) {
+					for (const auto& file : *dir) {
 						length += file->name_size();
 					}
 				}
 				return length;
+			}
+
+			inline void prepare_for_write()
+			{
+				update_header();
+				update_directories();
+				update_files();
 			}
 
 			inline void sort()
@@ -1589,13 +1707,58 @@ namespace bsa
 				return true;
 			}
 
-			// TODO: finish
+			inline void update_directories()
+			{
+				std::size_t offset = 0;
+				offset += file_names_length();
+				offset += detail::header_t::block_size();
+				offset += detail::directory_t::block_size(version()) * directory_count();
+
+				for (const auto& dir : _dirs) {
+					dir->file_offset(offset);
+					if (directory_strings()) {
+						offset += dir->name_size();
+					}
+					offset += detail::file_t::block_size() * dir->file_count();
+				}
+			}
+
+			inline void update_files()
+			{
+				std::size_t offset = 0;
+				offset += detail::header_t::block_size();
+				offset += detail::directory_t::block_size(version()) * directory_count();
+				if (directory_strings()) {
+					offset += directory_names_length();
+				}
+				offset += detail::file_t::block_size() * file_count();
+				if (file_strings()) {
+					offset += file_names_length();
+				}
+
+				for (const auto& dir : _dirs) {
+					for (const auto& file : *dir) {
+						file->offset(offset);
+						if (embedded_file_names()) {
+							// bstring
+							offset += 1 + (dir->name_size() - 1) + 1 + (file->name_size() - 1);
+						}
+						offset += file->size();
+					}
+				}
+			}
+
 			inline void update_header()
 			{
+				_header.directory_count(
+					calc_directory_count());
+				_header.directory_names_length(
+					calc_directory_names_length());
+
 				_header.file_count(
 					calc_file_count());
-				_header.directory_count(
-					_dirs.size());
+				_header.file_names_length(
+					calc_file_names_length());
 			}
 
 			container_t _dirs;

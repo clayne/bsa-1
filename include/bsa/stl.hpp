@@ -92,6 +92,8 @@ namespace bsa
 			using std::filesystem::path;
 		}
 
+		template <class CharT>
+		using basic_string_view = std::basic_string_view<CharT>;
 		using std::string_view;
 
 		using std::in_place;
@@ -152,6 +154,8 @@ namespace bsa
 			using boost::filesystem::path;
 		}
 
+		template <class CharT>
+		using basic_string_view = boost::basic_string_ref<CharT>;
 		using string_view = boost::string_ref;
 
 		static const auto in_place = boost::in_place_init;
