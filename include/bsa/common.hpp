@@ -316,7 +316,7 @@ namespace bsa
 		BSA_NODISCARD constexpr To sign_extend(From a_from) noexcept
 		{
 			const auto to = static_cast<To>(a_from);
-			assert(static_cast<From>(to) == a_from);
+			assert(static_cast<From>(static_cast<stl::make_unsigned_t<To>>(to)) == a_from);
 			return to;
 		}
 
@@ -359,64 +359,28 @@ namespace bsa
 		// unexpected hashing behavior
 		BSA_NODISCARD constexpr char mapchar(char a_ch) noexcept
 		{
-			switch (a_ch) {
-			case '/':
-				return '\\';
-			case 'A':
-				return 'a';
-			case 'B':
-				return 'b';
-			case 'C':
-				return 'c';
-			case 'D':
-				return 'd';
-			case 'E':
-				return 'e';
-			case 'F':
-				return 'f';
-			case 'G':
-				return 'g';
-			case 'H':
-				return 'h';
-			case 'I':
-				return 'i';
-			case 'J':
-				return 'j';
-			case 'K':
-				return 'k';
-			case 'L':
-				return 'l';
-			case 'M':
-				return 'm';
-			case 'N':
-				return 'n';
-			case 'O':
-				return 'o';
-			case 'P':
-				return 'p';
-			case 'Q':
-				return 'q';
-			case 'R':
-				return 'r';
-			case 'S':
-				return 's';
-			case 'T':
-				return 't';
-			case 'U':
-				return 'u';
-			case 'V':
-				return 'v';
-			case 'W':
-				return 'w';
-			case 'X':
-				return 'x';
-			case 'Y':
-				return 'y';
-			case 'Z':
-				return 'z';
-			default:
-				return a_ch;
-			}
+			constexpr auto MAP = []() noexcept {
+				constexpr auto MAX =
+					zero_extend<std::size_t>((std::numeric_limits<unsigned char>::max)()) + 1;
+
+				std::array<char, MAX> map{};
+				std::size_t i = 0;
+				for (auto& ch : map) {
+					ch = zero_extend<char>(i++);
+				}
+
+				map[zero_extend<std::size_t>('/')] = '\\';
+
+				i = zero_extend<std::size_t>('A');
+				char j = 'a';
+				while (i <= zero_extend<std::size_t>('Z')) {
+					map[i++] = j++;
+				}
+
+				return map;
+			}();
+
+			return MAP[zero_extend<std::size_t>(a_ch)];
 		}
 
 
@@ -452,17 +416,9 @@ namespace bsa
 			using reverse_iterator = typename value_type::reverse_iterator;
 			using const_reverse_iterator = typename value_type::const_reverse_iterator;
 
-			inline path_t() noexcept :
-				_impl()
-			{}
-
-			inline path_t(const path_t& a_rhs) :
-				_impl(a_rhs._impl)
-			{}
-
-			inline path_t(path_t&& a_rhs) noexcept :
-				_impl(std::move(a_rhs._impl))
-			{}
+			path_t() noexcept = default;
+			path_t(const path_t&) = default;
+			path_t(path_t&&) noexcept = default;
 
 			inline path_t(stl::string_view a_path) :
 				_impl()
@@ -472,21 +428,8 @@ namespace bsa
 
 			~path_t() = default;
 
-			inline path_t& operator=(const path_t& a_rhs)
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = a_rhs._impl;
-				}
-				return *this;
-			}
-
-			inline path_t& operator=(path_t&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_impl = std::move(a_rhs._impl);
-				}
-				return *this;
-			}
+			path_t& operator=(const path_t&) = default;
+			path_t& operator=(path_t&&) noexcept = default;
 
 			inline path_t& operator=(stl::string_view a_path)
 			{
@@ -558,16 +501,16 @@ namespace bsa
 				_endian(endian::little)
 			{}
 
-			inline istream_t(const istream_t& a_rhs) :
+			inline istream_t(const istream_t& a_rhs) noexcept :
 				_stream(a_rhs._stream),
 				_pos(a_rhs._pos),
-				_endian(endian::little)
+				_endian(a_rhs._endian)
 			{}
 
-			inline istream_t(istream_t&& a_rhs) :
+			inline istream_t(istream_t&& a_rhs) noexcept :
 				_stream(std::move(a_rhs._stream)),
 				_pos(std::move(a_rhs._pos)),
-				_endian(endian::little)
+				_endian(std::move(a_rhs._endian))
 			{}
 
 			inline istream_t(stream_type a_stream) :
@@ -584,7 +527,7 @@ namespace bsa
 				open(a_path);
 			}
 
-			~istream_t() = default;
+			~istream_t() noexcept = default;
 
 			inline istream_t& operator=(const istream_t& a_rhs) noexcept
 			{
@@ -600,114 +543,49 @@ namespace bsa
 			{
 				if (this != std::addressof(a_rhs)) {
 					_stream = std::move(a_rhs._stream);
-
 					_pos = std::move(a_rhs._pos);
-					a_rhs._pos = 0;
-
 					_endian = std::move(a_rhs._endian);
-					a_rhs._endian = endian::little;
 				}
 				return *this;
 			}
 
-			inline istream_t& operator>>(std::int8_t& a_value)
+			template <
+				class T,
+				stl::enable_if_t<
+					stl::is_integral_v<T>,
+					int> = 0>
+			inline istream_t& operator>>(T& a_value)
 			{
-				a_value = ref<std::int8_t>(_pos++);
-				return *this;
-			}
+				using integer_t =
+					std::conditional_t<
+						(sizeof(T) > sizeof(std::size_t)),
+						stl::make_unsigned_t<T>,
+						std::size_t>;
+				integer_t tmp = 0;
 
-			inline istream_t& operator>>(std::uint8_t& a_value)
-			{
-				a_value = ref<std::uint8_t>(_pos++);
-				return *this;
-			}
-
-			inline istream_t& operator>>(std::uint16_t& a_value)
-			{
 				switch (_endian) {
 				case endian::little:
-					a_value =
-						zero_extend<std::uint16_t>(
-							ref<std::uint32_t>(_pos++) << 0 * byte_v |
-							ref<std::uint32_t>(_pos++) << 1 * byte_v);
+					for (std::size_t i = 0; i < sizeof(T); ++i) {
+						tmp |= ref<integer_t>(_pos++) << i * byte_v;
+					}
 					break;
 				case endian::big:
-					a_value =
-						zero_extend<std::uint16_t>(
-							ref<std::uint32_t>(_pos++) << 1 * byte_v |
-							ref<std::uint32_t>(_pos++) << 0 * byte_v);
+					for (auto i = zero_extend<std::ptrdiff_t>(sizeof(T)); i >= 0; --i) {
+						tmp |= ref<integer_t>(_pos++) << i * byte_v;
+					}
 					break;
 				default:
 					throw input_error();
 				}
 
-				return *this;
-			}
-
-			inline istream_t& operator>>(std::uint32_t& a_value)
-			{
-				switch (_endian) {
-				case endian::little:
-					a_value =
-						zero_extend<std::uint32_t>(
-							ref<std::uint32_t>(_pos++) << 0 * byte_v |
-							ref<std::uint32_t>(_pos++) << 1 * byte_v |
-							ref<std::uint32_t>(_pos++) << 2 * byte_v |
-							ref<std::uint32_t>(_pos++) << 3 * byte_v);
-					break;
-				case endian::big:
-					a_value =
-						zero_extend<std::uint32_t>(
-							ref<std::uint32_t>(_pos++) << 3 * byte_v |
-							ref<std::uint32_t>(_pos++) << 2 * byte_v |
-							ref<std::uint32_t>(_pos++) << 1 * byte_v |
-							ref<std::uint32_t>(_pos++) << 0 * byte_v);
-					break;
-				default:
-					throw input_error();
-				}
-
-				return *this;
-			}
-
-			inline istream_t& operator>>(std::uint64_t& a_value)
-			{
-				switch (_endian) {
-				case endian::little:
-					a_value =
-						zero_extend<std::uint64_t>(
-							ref<std::uint64_t>(_pos++) << 0 * byte_v |
-							ref<std::uint64_t>(_pos++) << 1 * byte_v |
-							ref<std::uint64_t>(_pos++) << 2 * byte_v |
-							ref<std::uint64_t>(_pos++) << 3 * byte_v |
-							ref<std::uint64_t>(_pos++) << 4 * byte_v |
-							ref<std::uint64_t>(_pos++) << 5 * byte_v |
-							ref<std::uint64_t>(_pos++) << 6 * byte_v |
-							ref<std::uint64_t>(_pos++) << 7 * byte_v);
-					break;
-				case endian::big:
-					a_value =
-						zero_extend<std::uint64_t>(
-							ref<std::uint64_t>(_pos++) << 7 * byte_v |
-							ref<std::uint64_t>(_pos++) << 6 * byte_v |
-							ref<std::uint64_t>(_pos++) << 5 * byte_v |
-							ref<std::uint64_t>(_pos++) << 4 * byte_v |
-							ref<std::uint64_t>(_pos++) << 3 * byte_v |
-							ref<std::uint64_t>(_pos++) << 2 * byte_v |
-							ref<std::uint64_t>(_pos++) << 1 * byte_v |
-							ref<std::uint64_t>(_pos++) << 0 * byte_v);
-					break;
-				default:
-					throw input_error();
-				}
-
+				a_value = zero_extend<T>(tmp);
 				return *this;
 			}
 
 			template <std::size_t N>
 			inline istream_t& operator>>(std::array<char, N>& a_value)
 			{
-				read(a_value.data(), a_value.size());
+				read(a_value.begin(), a_value.size());
 				return *this;
 			}
 
@@ -862,88 +740,36 @@ namespace bsa
 			ostream_t& operator=(const ostream_t&) = delete;
 			ostream_t& operator=(ostream_t&&) = delete;
 
-			inline ostream_t& operator<<(std::int8_t a_value)
+			template <
+				class T,
+				stl::enable_if_t<
+					stl::is_integral_v<T>,
+					int> = 0>
+			inline ostream_t& operator<<(T a_value)
 			{
-				std::array<char_type, 1> buf;
-				buf[0] = zero_extend<char_type>(a_value);
-				return *this << buf;
-			}
+				using integer_t =
+					std::conditional_t<
+						(sizeof(T) > sizeof(unsigned int)),
+						stl::make_unsigned_t<T>,
+						unsigned int>;
+				constexpr auto MASK =
+					zero_extend<std::size_t>(
+						(std::numeric_limits<std::uint8_t>::max)());
 
-			inline ostream_t& operator<<(std::uint8_t a_value)
-			{
-				std::array<char_type, 1> buf;
-				buf[0] = zero_extend<char_type>(a_value);
-				return *this << buf;
-			}
-
-			inline ostream_t& operator<<(std::uint16_t a_value)
-			{
-				std::array<char_type, 2> buf;
+				const auto value = zero_extend<integer_t>(a_value);
+				std::array<stl::byte, sizeof(T)> buf;
+				auto it = buf.begin();
 
 				switch (_endian) {
 				case endian::little:
-					buf[0] = zero_extend<char_type>(zero_extend<std::uint32_t>(a_value) >> 0 * byte_v);
-					buf[1] = zero_extend<char_type>(zero_extend<std::uint32_t>(a_value) >> 1 * byte_v);
+					for (std::size_t i = 0; i < sizeof(T); ++i) {
+						*it++ = zero_extend<stl::byte>((value >> i * byte_v) & MASK);
+					}
 					break;
 				case endian::big:
-					buf[0] = zero_extend<char_type>(zero_extend<std::uint32_t>(a_value) >> 1 * byte_v);
-					buf[1] = zero_extend<char_type>(zero_extend<std::uint32_t>(a_value) >> 0 * byte_v);
-					break;
-				default:
-					throw output_error();
-				}
-
-				return *this << buf;
-			}
-
-			inline ostream_t& operator<<(std::uint32_t a_value)
-			{
-				std::array<char_type, 4> buf;
-
-				switch (_endian) {
-				case endian::little:
-					buf[0] = zero_extend<char_type>(a_value >> 0 * byte_v);
-					buf[1] = zero_extend<char_type>(a_value >> 1 * byte_v);
-					buf[2] = zero_extend<char_type>(a_value >> 2 * byte_v);
-					buf[3] = zero_extend<char_type>(a_value >> 3 * byte_v);
-					break;
-				case endian::big:
-					buf[0] = zero_extend<char_type>(a_value >> 3 * byte_v);
-					buf[1] = zero_extend<char_type>(a_value >> 2 * byte_v);
-					buf[2] = zero_extend<char_type>(a_value >> 1 * byte_v);
-					buf[3] = zero_extend<char_type>(a_value >> 0 * byte_v);
-					break;
-				default:
-					throw output_error();
-				}
-
-				return *this << buf;
-			}
-
-			inline ostream_t& operator<<(std::uint64_t a_value)
-			{
-				std::array<char_type, 4> buf;
-
-				switch (_endian) {
-				case endian::little:
-					buf[0] = zero_extend<char_type>(a_value >> 0 * byte_v);
-					buf[1] = zero_extend<char_type>(a_value >> 1 * byte_v);
-					buf[2] = zero_extend<char_type>(a_value >> 2 * byte_v);
-					buf[3] = zero_extend<char_type>(a_value >> 3 * byte_v);
-					buf[4] = zero_extend<char_type>(a_value >> 4 * byte_v);
-					buf[5] = zero_extend<char_type>(a_value >> 5 * byte_v);
-					buf[6] = zero_extend<char_type>(a_value >> 6 * byte_v);
-					buf[7] = zero_extend<char_type>(a_value >> 7 * byte_v);
-					break;
-				case endian::big:
-					buf[0] = zero_extend<char_type>(a_value >> 7 * byte_v);
-					buf[1] = zero_extend<char_type>(a_value >> 6 * byte_v);
-					buf[2] = zero_extend<char_type>(a_value >> 5 * byte_v);
-					buf[3] = zero_extend<char_type>(a_value >> 4 * byte_v);
-					buf[4] = zero_extend<char_type>(a_value >> 3 * byte_v);
-					buf[5] = zero_extend<char_type>(a_value >> 2 * byte_v);
-					buf[6] = zero_extend<char_type>(a_value >> 1 * byte_v);
-					buf[7] = zero_extend<char_type>(a_value >> 0 * byte_v);
+					for (auto i = zero_extend<std::ptrdiff_t>(sizeof(T)); i >= 0; --i) {
+						*it++ = zero_extend<stl::byte>((value >> i * byte_v) & MASK);
+					}
 					break;
 				default:
 					throw output_error();
@@ -958,24 +784,46 @@ namespace bsa
 			}
 
 			template <std::size_t N>
+			inline ostream_t& operator<<(const std::array<stl::byte, N>& a_value)
+			{
+				return write(
+					reinterpret_cast<const char*>(a_value.data()),
+					zero_extend<std::streamsize>(a_value.size()));
+			}
+
+			template <std::size_t N>
 			inline ostream_t& operator<<(const std::array<char_type, N>& a_value)
 			{
-				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
+				return write(a_value.data(), zero_extend<std::streamsize>(a_value.size()));
+			}
+
+			inline ostream_t& operator<<(stl::span<stl::byte> a_value)
+			{
+				return write(
+					reinterpret_cast<const char*>(a_value.data()),
+					zero_extend<std::streamsize>(a_value.size()));
+			}
+
+			inline ostream_t& operator<<(stl::span<const stl::byte> a_value)
+			{
+				return write(
+					reinterpret_cast<const char*>(a_value.data()),
+					zero_extend<std::streamsize>(a_value.size()));
 			}
 
 			inline ostream_t& operator<<(stl::span<char_type> a_value)
 			{
-				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
+				return write(a_value.data(), zero_extend<std::streamsize>(a_value.size()));
 			}
 
 			inline ostream_t& operator<<(stl::span<const char_type> a_value)
 			{
-				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
+				return write(a_value.data(), zero_extend<std::streamsize>(a_value.size()));
 			}
 
 			inline ostream_t& operator<<(stl::basic_string_view<char_type> a_value)
 			{
-				return write(a_value.data(), sign_extend<std::streamsize>(a_value.size()));
+				return write(a_value.data(), zero_extend<std::streamsize>(a_value.size()));
 			}
 
 			constexpr ostream_t& operator<<(endian a_endian) noexcept

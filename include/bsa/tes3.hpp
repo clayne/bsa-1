@@ -302,8 +302,7 @@ namespace bsa
 					_hash(),
 					_block(),
 					_name(),
-					_data(),
-					_archive(stl::nullopt)
+					_data()
 				{
 					path_t path(a_relativePath);
 					_hash = file_hasher()(path);
@@ -359,9 +358,12 @@ namespace bsa
 						return stl::get<iview>(_data);
 					case ifile:
 						return stl::get<ifile>(_data).subspan();
+					case iarchive:
+						return stl::get<iarchive>(_data).first;
 					case inull:
-					default:
 						return {};
+					default:
+						throw exception();
 					}
 				}
 
@@ -372,7 +374,6 @@ namespace bsa
 					} else {
 						_data.emplace<iview>(std::move(a_data));
 						_block.size = zero_extend<std::uint32_t>(a_data.size());
-						_archive.reset();
 					}
 				}
 
@@ -383,7 +384,6 @@ namespace bsa
 					} else {
 						_data.emplace<ifile>(std::move(a_input));
 						_block.size = zero_extend<std::uint32_t>(a_input.size());
-						_archive.reset();
 					}
 				}
 
@@ -415,17 +415,16 @@ namespace bsa
 					const restore_point p(a_input);
 
 					a_input.seek_rel(offset());
-					_data.emplace<iview>(
-						a_input.subspan(size()));
-
-					_archive.emplace(a_input);
+					_data.emplace<iarchive>(
+						a_input.subspan(size()),
+						a_input);
 				}
 
 				inline void extract(std::ostream& a_file)
 				{
 					const auto data = get_data();
 					if (!data.empty()) {
-						const auto ssize = sign_extend<std::streamsize>(size());
+						const auto ssize = zero_extend<std::streamsize>(size());
 						a_file.write(reinterpret_cast<const char*>(data.data()), ssize);
 					} else {
 						throw output_error();
@@ -442,16 +441,14 @@ namespace bsa
 
 				inline void write_name(ostream_t& a_output) const
 				{
-					a_output.write(_name.data(), sign_extend<std::streamsize>(name_size()));
+					a_output << stl::string_view{ _name.data(), name_size() };
 				}
 
 				inline void write_data(ostream_t& a_output) const
 				{
-					const auto ssize = sign_extend<std::streamsize>(size());
 					const auto data = get_data();
 					if (!data.empty()) {
-						// TODO: stronger output wrapper
-						a_output.write(reinterpret_cast<const char*>(data.data()), ssize);
+						a_output << data;
 					} else {
 						throw output_error();
 					}
@@ -462,8 +459,14 @@ namespace bsa
 				{
 					inull,
 					iview,
-					ifile
+					ifile,
+					iarchive
 				};
+
+				using null_type = stl::monostate;
+				using view_type = stl::span<const stl::byte>;
+				using file_type = istream_t;
+				using archive_type = std::pair<stl::span<const stl::byte>, istream_t>;
 
 				struct block_t
 				{
@@ -501,8 +504,7 @@ namespace bsa
 				hash_t _hash;
 				block_t _block;
 				std::string _name;
-				stl::variant<stl::monostate, stl::span<const stl::byte>, istream_t> _data;
-				stl::optional<istream_t> _archive;
+				stl::variant<null_type, view_type, file_type, archive_type> _data;
 			};
 			using file_ptr = std::shared_ptr<file_t>;
 		}
@@ -520,10 +522,9 @@ namespace bsa
 			constexpr hash& operator=(const hash&) noexcept = default;
 			constexpr hash& operator=(hash&&) noexcept = default;
 
-			// consider dropping "_hash" postfix
-			BSA_NODISCARD constexpr std::uint32_t high_hash() const noexcept { return _impl.high(); }
-			BSA_NODISCARD constexpr std::uint32_t low_hash() const noexcept { return _impl.low(); }
-			BSA_NODISCARD constexpr std::uint64_t numeric_hash() const noexcept { return _impl.numeric(); }
+			BSA_NODISCARD constexpr std::uint32_t high() const noexcept { return _impl.high(); }
+			BSA_NODISCARD constexpr std::uint32_t low() const noexcept { return _impl.low(); }
+			BSA_NODISCARD constexpr std::uint64_t numeric() const noexcept { return _impl.numeric(); }
 
 		protected:
 			friend class file;
@@ -541,6 +542,13 @@ namespace bsa
 		private:
 			value_type _impl;
 		};
+
+
+		inline std::ostream& operator<<(std::ostream& a_ostream, const hash& a_hash)
+		{
+			a_ostream << a_hash.numeric();
+			return a_ostream;
+		}
 
 
 		class file
@@ -1260,7 +1268,7 @@ namespace bsa
 				for (auto& file : _files) {
 					hash = detail::file_hasher()(file->str_ref());
 					if (hash != file->hash_ref()) {
-						assert(false);
+						return false;
 					}
 				}
 

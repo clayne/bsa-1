@@ -18,6 +18,7 @@ namespace stl
 #if __cplusplus >= 201703L
 		using std::filesystem::directory_iterator;
 		using std::filesystem::file_size;
+		using std::filesystem::filesystem_error;
 		using std::filesystem::recursive_directory_iterator;
 		using std::filesystem::relative;
 
@@ -28,6 +29,7 @@ namespace stl
 #else
 		using boost::filesystem::directory_iterator;
 		using boost::filesystem::file_size;
+		using boost::filesystem::filesystem_error;
 		using boost::filesystem::recursive_directory_iterator;
 		using boost::filesystem::relative;
 
@@ -196,19 +198,21 @@ void parse_tes4()
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
 
-		for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
-			if (!std::regex_match(sysEntry.path().string(), regex)) {
-				continue;
-			}
+		try {
+			for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
+				if (!std::regex_match(sysEntry.path().string(), regex)) {
+					continue;
+				}
 
-			archive.read(sysEntry.path());
-			for (auto& dir : archive) {
-				std::cout << dir.string() << '\n';
-				for (auto& file : dir) {
-					std::cout << '\t' << file.string() << '\n';
+				archive.read(sysEntry.path());
+				for (auto& dir : archive) {
+					std::cout << dir.string() << '\n';
+					for (auto& file : dir) {
+						std::cout << '\t' << file.string() << '\n';
+					}
 				}
 			}
-		}
+		} catch (const stl::filesystem::filesystem_error&) {}
 	}
 }
 
@@ -251,12 +255,12 @@ int main(int, const char*[])
 	//write_tes3();
 	//parse_tes3();
 
-	//parse_tes4();
+	parse_tes4();
 
 	//parse_fo4();
 
-	bsa::sse::archive archive;
-	archive >> R"(E:\Games\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim - Textures8.bsa)";
+	//bsa::sse::archive archive;
+	//archive >> R"(E:\Games\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim - Textures8.bsa)";
 
 #if 0
 	{

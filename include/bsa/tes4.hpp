@@ -153,6 +153,7 @@ namespace bsa
 					case v104:
 					case v105:
 						_block.version = zero_extend<std::uint32_t>(a_version);
+						break;
 					default:
 						throw exception();
 					}
@@ -212,7 +213,7 @@ namespace bsa
 
 				inline void write(ostream_t& a_output) const
 				{
-					_block.write(a_output, *this);
+					_block.write(a_output, directory_strings(), file_strings());
 				}
 
 			private:
@@ -253,19 +254,11 @@ namespace bsa
 						a_input.seek_rel(2);
 					}
 
-					inline void write(ostream_t& a_output, const header_t& a_header) const
+					inline void write(ostream_t& a_output, bool a_directoryStrings, bool a_fileStrings) const
 					{
 						constexpr std::uint16_t pad = 0;
-
-						const auto myDirectoryNamesLength =
-							a_header.directory_strings() ?
-								directoryNamesLength :
-								0;
-
-						const auto myFileNamesLength =
-							a_header.file_strings() ?
-								fileNamesLength :
-								0;
+						const auto myDirectoryNamesLength = a_directoryStrings ? directoryNamesLength : 0;
+						const auto myFileNamesLength = a_fileStrings ? fileNamesLength : 0;
 
 						a_output
 							<< tag
@@ -307,9 +300,9 @@ namespace bsa
 				{
 					auto old = (types() & a_mask) == a_mask;
 					if (a_set) {
-						_block.flags |= a_mask;
+						_block.archiveTypes |= a_mask;
 					} else {
-						_block.flags &= ~a_mask;
+						_block.archiveTypes &= ~a_mask;
 					}
 					return old;
 				}
@@ -496,9 +489,12 @@ namespace bsa
 						return stl::get<iview>(_data);
 					case ifile:
 						return stl::get<ifile>(_data).subspan();
+					case iarchive:
+						return stl::get<iarchive>(_data).first;
 					case inull:
-					default:
 						return {};
+					default:
+						throw exception();
 					}
 				}
 
@@ -510,7 +506,6 @@ namespace bsa
 						_data.emplace<iview>(std::move(a_data));
 						_block.size = zero_extend<std::uint32_t>(a_data.size());
 						_block.compressed = a_compressed;
-						_archive.reset();
 					}
 				}
 
@@ -522,7 +517,6 @@ namespace bsa
 						_data.emplace<ifile>(std::move(a_input));
 						_block.size = zero_extend<std::uint32_t>(a_input.size());
 						_block.compressed = a_compressed;
-						_archive.reset();
 					}
 				}
 
@@ -554,16 +548,16 @@ namespace bsa
 						a_input.seek_rel(len);
 					}
 
-					_data.emplace<iview>(
-						a_input.subspan(size()));
-					_archive.emplace(a_input);
+					_data.emplace<iarchive>(
+						a_input.subspan(size()),
+						a_input);
 				}
 
 				inline void extract(std::ostream& a_file)
 				{
 					const auto data = get_data();
 					if (!data.empty()) {
-						const auto ssize = sign_extend<std::streamsize>(size());
+						const auto ssize = zero_extend<std::streamsize>(size());
 						a_file.write(reinterpret_cast<const char*>(data.data()), ssize);
 					} else {
 						throw output_error();
@@ -582,14 +576,14 @@ namespace bsa
 
 				inline void write_name(ostream_t& a_output) const
 				{
-					a_output.write(_name.c_str(), sign_extend<std::streamsize>(_name.size() + 1));
+					a_output << stl::string_view{ _name.data(), name_size() };
 				}
 
 				inline void write_data(ostream_t& a_output, const header_t& a_header, const std::string& a_dirPath) const
 				{
-					if (a_header.embedded_file_names()) {
+					if (a_header.embedded_file_names()) {  // bstring
 						std::size_t length = a_dirPath.length();
-						length += 1;
+						length += 1;  // directory separator
 						length += _name.length();
 						a_output << zero_extend<std::uint8_t>(length);
 						a_output << stl::string_view{ a_dirPath };
@@ -597,11 +591,9 @@ namespace bsa
 						a_output << stl::string_view{ _name };
 					}
 
-					const auto ssize = sign_extend<std::streamsize>(size());
 					const auto data = get_data();
 					if (!data.empty()) {
-						// TODO: stronger output wrapper
-						a_output.write(reinterpret_cast<const char*>(data.data()), ssize);
+						a_output << data;
 					} else {
 						throw output_error();
 					}
@@ -612,15 +604,22 @@ namespace bsa
 				{
 					inull,
 					iview,
-					ifile
+					ifile,
+					iarchive
 				};
+
+				using null_type = stl::monostate;
+				using view_type = stl::span<const stl::byte>;
+				using file_type = istream_t;
+				using archive_type = std::pair<stl::span<const stl::byte>, istream_t>;
+
 
 				struct block_t	// BSFileEntry
 				{
 					enum : std::uint32_t
 					{
-						icompression = static_cast<std::uint32_t>(1 << 30),
-						ichecked = static_cast<std::uint32_t>(1 << 31)
+						icompression = static_cast<std::uint32_t>(1) << 30,
+						ichecked = static_cast<std::uint32_t>(1) << 31
 					};
 
 					constexpr block_t() noexcept :
@@ -667,8 +666,7 @@ namespace bsa
 				hash_t _hash;
 				block_t _block;
 				std::string _name;
-				stl::variant<stl::monostate, stl::span<const stl::byte>, istream_t> _data;
-				stl::optional<istream_t> _archive;
+				stl::variant<null_type, view_type, file_type, archive_type> _data;
 			};
 			using file_ptr = std::shared_ptr<file_t>;
 
@@ -745,6 +743,13 @@ namespace bsa
 					}
 				}
 
+				inline void read_file_names(istream_t& a_input)
+				{
+					for (auto& file : _files) {
+						file->read_name(a_input);
+					}
+				}
+
 				inline void write(ostream_t& a_output, const header_t& a_header) const
 				{
 					_hash.write(a_output, a_header);
@@ -759,8 +764,22 @@ namespace bsa
 						a_output << stl::string_view{ _name.c_str(), len };
 					}
 
-					for (auto& file : _files) {
+					for (const auto& file : _files) {
 						file->write(a_output, a_header);
+					}
+				}
+
+				inline void write_file_names(ostream_t& a_output) const
+				{
+					for (const auto& file : _files) {
+						file->write_name(a_output);
+					}
+				}
+
+				inline void write_file_data(ostream_t& a_output, const header_t& a_header) const
+				{
+					for (const auto& file : _files) {
+						file->write_data(a_output, a_header, _name);
 					}
 				}
 
@@ -802,6 +821,7 @@ namespace bsa
 
 					inline void write(ostream_t& a_output, const header_t& a_header) const
 					{
+						std::uint32_t pad = 0;
 						switch (a_header.version()) {
 						case v103:
 						case v104:
@@ -811,9 +831,9 @@ namespace bsa
 							break;
 						case v105:
 							a_output << fileCount;
-							a_output.seek_rel(4);
+							a_output << pad;
 							a_output << fileOffset;
-							a_output.seek_rel(4);
+							a_output << pad;
 							break;
 						default:
 							throw output_error();
@@ -918,7 +938,7 @@ namespace bsa
 				{
 					for (auto& ch : a_path) {
 						if (ch < 0) {
-							throw hash_error();
+							throw hash_non_ascii();
 						}
 					}
 				}
@@ -972,41 +992,21 @@ namespace bsa
 				}
 
 			private:
-				union extension_t
+				BSA_NODISCARD static constexpr std::uint32_t make_extension(stl::string_view a_val) noexcept
 				{
-					constexpr extension_t() noexcept :
-						i(0)
-					{}
+					using integer_t =
+						stl::conditional_t<
+							(sizeof(std::uint32_t) > sizeof(unsigned int)),
+							std::uint32_t,
+							unsigned int>;
 
-					constexpr extension_t(std::uint32_t a_val) noexcept :
-						i(a_val)
-					{}
-
-					constexpr extension_t(const char (&a_val)[5]) noexcept :
-						c{ '\0' }
-					{
-						for (std::size_t idx = 0; idx < 4; ++idx) {
-							at(c, idx) = at(a_val, idx);
-						}
+					integer_t tmp = 0;
+					for (std::size_t i = 0; i < (std::min)(a_val.size(), sizeof(std::uint32_t)); ++i) {
+						tmp |= zero_extend<integer_t>(a_val[i]) << i * byte_v;
 					}
 
-					constexpr extension_t(const stl::string_view& a_val) noexcept :
-						c{ '\0' }
-					{
-						std::size_t idx = 0;
-						while (idx < std::min<std::size_t>(a_val.length(), 4)) {
-							at(c, idx) = a_val[idx];
-							++idx;
-						}
-						while (idx < 4) {
-							at(c, idx) = '\0';
-							++idx;
-						}
-					}
-
-					char c[4];
-					std::uint32_t i;
-				};
+					return zero_extend<std::uint32_t>(tmp);
+				}
 
 				BSA_NODISCARD inline std::pair<std::string, std::string> normalize(stl::string_view a_path) const
 				{
@@ -1034,13 +1034,13 @@ namespace bsa
 
 				BSA_NODISCARD inline hash_t hash(stl::string_view a_stem, stl::string_view a_extension) const
 				{
-					constexpr std::array<extension_t, 6> EXTENSIONS{
-						extension_t{ "\0\0\0\0" },
-						extension_t{ ".nif" },
-						extension_t{ ".kf\0" },
-						extension_t{ ".dds" },
-						extension_t{ ".wav" },
-						extension_t{ ".adp" }
+					constexpr std::array<std::uint32_t, 6> EXTENSIONS{
+						make_extension(""),
+						make_extension(".nif"),
+						make_extension(".kf"),
+						make_extension(".dds"),
+						make_extension(".wav"),
+						make_extension(".adp")
 					};
 
 					auto hash = _dirHasher.hash(a_stem);
@@ -1052,9 +1052,9 @@ namespace bsa
 					}
 					block.crc += extCRC;
 
-					const extension_t ext(a_extension);
+					const auto ext = make_extension(a_extension);
 					for (std::uint8_t i = 0; i < EXTENSIONS.size(); ++i) {
-						if (ext.i == EXTENSIONS[i].i) {
+						if (ext == EXTENSIONS[i]) {
 							block.first += 32 * (i & 0xFC);
 							block.last += (i & 0xFE) << 6;
 							block.last2 += i << 7;
@@ -1531,7 +1531,7 @@ namespace bsa
 				clear();
 
 				_header.read(input);
-				switch (_header.version()) {
+				switch (version()) {
 				case v103:
 				case v104:
 				case v105:
@@ -1540,22 +1540,20 @@ namespace bsa
 					throw version_error();
 				}
 
-				input.seek_beg(_header.header_size());
-				for (std::size_t i = 0; i < _header.directory_count(); ++i) {
+				input.seek_beg(header_size());
+				for (std::size_t i = 0; i < directory_count(); ++i) {
 					auto dir = std::make_shared<detail::directory_t>();
 					dir->read(input, _header);
 					_dirs.push_back(std::move(dir));
 				}
 
-				auto offset = _header.directory_names_length() + _header.directory_count();	 // include prefixed length byte
-				offset += _header.file_count() * detail::file_t::block_size();
+				auto offset = directory_names_length() + directory_count();	 // include prefixed length byte
+				offset += file_count() * detail::file_t::block_size();
 				input.seek_rel(offset);
 
-				if (_header.file_strings()) {
+				if (file_strings()) {
 					for (auto& dir : _dirs) {
-						for (auto& file : *dir) {
-							file->read_name(input);
-						}
+						dir->read_file_names(input);
 					}
 				}
 
@@ -1590,22 +1588,14 @@ namespace bsa
 					dir->write_extra(output, _header);
 				}
 
-				for (const auto& dir : _dirs) {
-					for (const auto& file : *dir) {
-						file->write(output, _header);
+				if (file_strings()) {
+					for (const auto& dir : _dirs) {
+						dir->write_file_names(output);
 					}
 				}
 
 				for (const auto& dir : _dirs) {
-					for (const auto& file : *dir) {
-						file->write_name(output);
-					}
-				}
-
-				for (const auto& dir : _dirs) {
-					for (const auto& file : *dir) {
-						file->write_data(output, _header, dir->str_ref());
-					}
+					dir->write_file_data(output, _header);
 				}
 			}
 
@@ -1689,14 +1679,14 @@ namespace bsa
 				for (const auto& dir : _dirs) {
 					dHash = detail::dir_hasher()(dir->str_ref());
 					if (dHash != dir->hash()) {
-						assert(false);
+						return false;
 					}
 
 					for (const auto& file : *dir) {
 						try {
 							const auto fHash = detail::file_hasher()(file->str_ref());
 							if (fHash != file->hash()) {
-								assert(false);
+								return false;
 							}
 						} catch (const hash_non_ascii&) {
 							continue;
