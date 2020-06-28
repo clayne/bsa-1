@@ -17,7 +17,6 @@
 #include <utility>
 #include <vector>
 
-
 namespace bsa
 {
 	namespace tes3	// The Elder Scrolls III: Morrowind
@@ -25,25 +24,21 @@ namespace bsa
 		using archive_version = std::size_t;
 		BSA_CXX17_INLINE constexpr archive_version v256{ 256 };
 
-
 		class archive;
 		class file;
 		class file_iterator;
 		class hash;
 
-
 		namespace detail
 		{
 			using namespace bsa::detail;
-
 
 			class file_hasher;
 			class file_t;
 			class hash_t;
 			class header_t;
 
-
-			class header_t
+			class header_t final
 			{
 			public:
 				constexpr header_t() noexcept = default;
@@ -132,8 +127,7 @@ namespace bsa
 				block_t _block;
 			};
 
-
-			class hash_t
+			class hash_t final
 			{
 			public:
 				constexpr hash_t() noexcept = default;
@@ -144,22 +138,6 @@ namespace bsa
 
 				constexpr hash_t& operator=(const hash_t&) noexcept = default;
 				constexpr hash_t& operator=(hash_t&&) noexcept = default;
-
-				BSA_NODISCARD friend constexpr bool operator==(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_lhs.numeric() == a_rhs.numeric(); }
-				BSA_NODISCARD friend constexpr bool operator!=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs == a_rhs); }
-
-				BSA_NODISCARD friend constexpr bool operator<(const hash_t& a_lhs, const hash_t& a_rhs) noexcept
-				{
-					if (a_lhs.low() != a_rhs.low()) {
-						return a_lhs.low() < a_rhs.low();
-					} else {
-						return a_lhs.high() < a_rhs.high();
-					}
-				}
-
-				BSA_NODISCARD friend constexpr bool operator>(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_rhs < a_lhs; }
-				BSA_NODISCARD friend constexpr bool operator<=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
-				BSA_NODISCARD friend constexpr bool operator>=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
 
 				BSA_NODISCARD static constexpr std::size_t block_size() noexcept { return 0x8; }
 
@@ -172,15 +150,8 @@ namespace bsa
 						   zero_extend<std::uint64_t>(_block.hi) << 4 * byte_v;
 				}
 
-				inline void read(istream_t& a_input)
-				{
-					_block.read(a_input);
-				}
-
-				inline void write(ostream_t& a_output) const
-				{
-					_block.write(a_output);
-				}
+				inline void read(istream_t& a_input) { _block.read(a_input); }
+				inline void write(ostream_t& a_output) const { _block.write(a_output); }
 
 			protected:
 				friend class file_hasher;
@@ -225,8 +196,23 @@ namespace bsa
 				block_t _block;
 			};
 
+			BSA_NODISCARD constexpr bool operator==(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_lhs.numeric() == a_rhs.numeric(); }
+			BSA_NODISCARD constexpr bool operator!=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs == a_rhs); }
 
-			class file_hasher
+			BSA_NODISCARD constexpr bool operator<(const hash_t& a_lhs, const hash_t& a_rhs) noexcept
+			{
+				if (a_lhs.low() != a_rhs.low()) {
+					return a_lhs.low() < a_rhs.low();
+				} else {
+					return a_lhs.high() < a_rhs.high();
+				}
+			}
+
+			BSA_NODISCARD constexpr bool operator>(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return a_rhs < a_lhs; }
+			BSA_NODISCARD constexpr bool operator<=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
+			BSA_NODISCARD constexpr bool operator>=(const hash_t& a_lhs, const hash_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
+
+			class file_hasher final
 			{
 			public:
 				constexpr file_hasher() noexcept = default;
@@ -290,8 +276,7 @@ namespace bsa
 				}
 			};
 
-
-			class file_t
+			class file_t final
 			{
 			public:
 				file_t() noexcept = default;
@@ -313,14 +298,6 @@ namespace bsa
 
 				file_t& operator=(const file_t&) = default;
 				file_t& operator=(file_t&&) noexcept = default;
-
-				BSA_NODISCARD friend constexpr bool operator==(const file_t& a_lhs, const file_t& a_rhs) { return a_lhs.hash_ref() == a_rhs.hash_ref(); }
-				BSA_NODISCARD friend constexpr bool operator!=(const file_t& a_lhs, const file_t& a_rhs) { return !(a_lhs == a_rhs); }
-
-				BSA_NODISCARD friend constexpr bool operator<(const file_t& a_lhs, const file_t& a_rhs) noexcept { return a_lhs.hash_ref() < a_rhs.hash_ref(); }
-				BSA_NODISCARD friend constexpr bool operator>(const file_t& a_lhs, const file_t& a_rhs) noexcept { return a_rhs < a_lhs; }
-				BSA_NODISCARD friend constexpr bool operator<=(const file_t& a_lhs, const file_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
-				BSA_NODISCARD friend constexpr bool operator>=(const file_t& a_lhs, const file_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
 
 				BSA_NODISCARD static constexpr std::size_t block_size() noexcept { return 0x8; }
 
@@ -507,24 +484,48 @@ namespace bsa
 				stl::variant<null_type, view_type, file_type, archive_type> _data;
 			};
 			using file_ptr = std::shared_ptr<file_t>;
+
+			BSA_NODISCARD constexpr bool operator==(const file_t& a_lhs, const file_t& a_rhs) { return a_lhs.hash_ref() == a_rhs.hash_ref(); }
+			BSA_NODISCARD constexpr bool operator!=(const file_t& a_lhs, const file_t& a_rhs) { return !(a_lhs == a_rhs); }
+
+			BSA_NODISCARD constexpr bool operator<(const file_t& a_lhs, const file_t& a_rhs) noexcept { return a_lhs.hash_ref() < a_rhs.hash_ref(); }
+			BSA_NODISCARD constexpr bool operator>(const file_t& a_lhs, const file_t& a_rhs) noexcept { return a_rhs < a_lhs; }
+			BSA_NODISCARD constexpr bool operator<=(const file_t& a_lhs, const file_t& a_rhs) noexcept { return !(a_lhs > a_rhs); }
+			BSA_NODISCARD constexpr bool operator>=(const file_t& a_lhs, const file_t& a_rhs) noexcept { return !(a_lhs < a_rhs); }
 		}
 
-
-		class hash
+		class hash final
 		{
 		public:
 			constexpr hash() noexcept = default;
 			constexpr hash(const hash&) noexcept = default;
 			constexpr hash(hash&&) noexcept = default;
 
+			explicit inline hash(stl::string_view a_path) :
+				_impl(detail::file_hasher()(a_path))
+			{}
+
 			~hash() noexcept = default;
 
 			constexpr hash& operator=(const hash&) noexcept = default;
 			constexpr hash& operator=(hash&&) noexcept = default;
 
+			inline hash& operator=(stl::string_view a_path)
+			{
+				_impl = detail::file_hasher()(a_path);
+				return *this;
+			}
+
 			BSA_NODISCARD constexpr std::uint32_t high() const noexcept { return _impl.high(); }
 			BSA_NODISCARD constexpr std::uint32_t low() const noexcept { return _impl.low(); }
 			BSA_NODISCARD constexpr std::uint64_t numeric() const noexcept { return _impl.numeric(); }
+
+			constexpr void swap(hash& a_rhs) noexcept
+			{
+				hash tmp{ std::move(*this) };
+				*this = std::move(a_rhs);
+				a_rhs = std::move(tmp);
+			}
 
 		protected:
 			friend class file;
@@ -543,6 +544,7 @@ namespace bsa
 			value_type _impl;
 		};
 
+		constexpr void swap(hash& a_lhs, hash& a_rhs) noexcept { a_lhs.swap(a_rhs); }
 
 		inline std::ostream& operator<<(std::ostream& a_ostream, const hash& a_hash)
 		{
@@ -550,14 +552,10 @@ namespace bsa
 			return a_ostream;
 		}
 
-
-		class file
+		class file final
 		{
 		public:
-			inline file() noexcept :
-				_impl(nullptr)
-			{}
-
+			file() noexcept = default;
 			file(const file&) noexcept = default;
 			file(file&&) noexcept = default;
 
@@ -578,33 +576,8 @@ namespace bsa
 			file& operator=(const file&) noexcept = default;
 			file& operator=(file&&) noexcept = default;
 
-			BSA_NODISCARD friend inline bool operator==(const file& a_lhs, const file& a_rhs) noexcept
-			{
-				if (!a_lhs && !a_rhs) {	 // neither have value
-					return true;
-				} else if (!a_lhs != !a_rhs) {	// one has value
-					return false;
-				} else {  // both have value
-					return a_lhs._impl->hash_ref() == a_rhs._impl->hash_ref();
-				}
-			}
-
-			BSA_NODISCARD friend inline bool operator!=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs == a_rhs); }
-
-			BSA_NODISCARD friend inline bool operator<(const file& a_lhs, const file& a_rhs) noexcept
-			{
-				if (!a_lhs && !a_rhs) {	 // neither have value
-					return true;
-				} else if (!a_lhs != !a_rhs) {	// one has value
-					return a_lhs.exists();
-				} else {  // both have value
-					return a_lhs._impl->hash_ref() < a_rhs._impl->hash_ref();
-				}
-			}
-
-			BSA_NODISCARD friend inline bool operator>(const file& a_lhs, const file& a_rhs) noexcept { return a_rhs < a_lhs; }
-			BSA_NODISCARD friend inline bool operator<=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs > a_rhs); }
-			BSA_NODISCARD friend inline bool operator>=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs < a_rhs); }
+			friend bool operator==(const file& a_lhs, const file& a_rhs) noexcept;
+			friend bool operator<(const file& a_lhs, const file& a_rhs) noexcept;
 
 			BSA_NODISCARD inline explicit operator bool() const noexcept { return exists(); }
 			BSA_NODISCARD inline bool exists() const noexcept { return static_cast<bool>(_impl); }
@@ -645,10 +618,10 @@ namespace bsa
 				_impl->extract(file);
 			}
 
-			BSA_NODISCARD inline hash hash_value() const noexcept
+			BSA_NODISCARD inline tes3::hash hash() const noexcept
 			{
 				assert(exists());
-				return hash{ _impl->hash_ref() };
+				return tes3::hash{ _impl->hash_ref() };
 			}
 
 			inline void pack(stl::span<const stl::byte> a_data)
@@ -675,6 +648,8 @@ namespace bsa
 				return _impl->str_ref();
 			}
 
+			inline void swap(file& a_rhs) noexcept { std::swap(*this, a_rhs); }
+
 		protected:
 			friend class archive;
 			friend class file_iterator;
@@ -698,8 +673,37 @@ namespace bsa
 			value_type _impl;
 		};
 
+		BSA_NODISCARD inline bool operator==(const file& a_lhs, const file& a_rhs) noexcept
+		{
+			if (!a_lhs && !a_rhs) {	 // neither have value
+				return true;
+			} else if (!a_lhs != !a_rhs) {	// one has value
+				return false;
+			} else {  // both have value
+				return a_lhs._impl->hash_ref() == a_rhs._impl->hash_ref();
+			}
+		}
 
-		class file_iterator
+		BSA_NODISCARD inline bool operator!=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs == a_rhs); }
+
+		BSA_NODISCARD inline bool operator<(const file& a_lhs, const file& a_rhs) noexcept
+		{
+			if (!a_lhs && !a_rhs) {	 // neither have value
+				return true;
+			} else if (!a_lhs != !a_rhs) {	// one has value
+				return a_lhs.exists();
+			} else {  // both have value
+				return a_lhs._impl->hash_ref() < a_rhs._impl->hash_ref();
+			}
+		}
+
+		BSA_NODISCARD inline bool operator>(const file& a_lhs, const file& a_rhs) noexcept { return a_rhs < a_lhs; }
+		BSA_NODISCARD inline bool operator<=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs > a_rhs); }
+		BSA_NODISCARD inline bool operator>=(const file& a_lhs, const file& a_rhs) noexcept { return !(a_lhs < a_rhs); }
+
+		inline void swap(file& a_lhs, file& a_rhs) noexcept { a_lhs.swap(a_rhs); }
+
+		class file_iterator final
 		{
 		public:
 			using value_type = file;
@@ -736,20 +740,7 @@ namespace bsa
 				return *this;
 			}
 
-			BSA_NODISCARD friend inline bool operator==(
-				const file_iterator& a_lhs,
-				const file_iterator& a_rhs) noexcept
-			{
-				return a_lhs._files == a_rhs._files &&
-					   a_lhs._pos == a_rhs._pos;
-			}
-
-			BSA_NODISCARD friend inline bool operator!=(
-				const file_iterator& a_lhs,
-				const file_iterator& a_rhs) noexcept
-			{
-				return !(a_lhs == a_rhs);
-			}
+			friend bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept;
 
 			BSA_NODISCARD inline reference operator*() noexcept { return fetch(); }
 			BSA_NODISCARD inline pointer operator->() noexcept { return std::addressof(fetch()); }
@@ -772,6 +763,8 @@ namespace bsa
 				++*this;
 				return tmp;
 			}
+
+			inline void swap(file_iterator& a_rhs) noexcept { std::swap(*this, a_rhs); }
 
 		protected:
 			friend class archive;
@@ -808,16 +801,17 @@ namespace bsa
 			std::size_t _pos;
 		};
 
-
-		inline void swap(file_iterator& a_lhs, file_iterator& a_rhs) noexcept
+		BSA_NODISCARD inline bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept
 		{
-			auto tmp = std::move(a_lhs);
-			a_lhs = std::move(a_rhs);
-			a_rhs = std::move(tmp);
+			return a_lhs._files == a_rhs._files &&
+				   a_lhs._pos == a_rhs._pos;
 		}
 
+		BSA_NODISCARD inline bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
 
-		class archive
+		inline void swap(file_iterator& a_lhs, file_iterator& a_rhs) noexcept { a_lhs.swap(a_rhs); }
+
+		class archive final
 		{
 		public:
 			using iterator = file_iterator;
@@ -839,36 +833,6 @@ namespace bsa
 
 			archive& operator=(const archive&) = default;
 			archive& operator=(archive&&) noexcept = default;
-
-			friend inline archive& operator>>(archive& a_archive, const stl::filesystem::path& a_path)
-			{
-				a_archive.read(a_path);
-				return a_archive;
-			}
-
-			friend inline archive& operator>>(archive& a_archive, const file& a_file)
-			{
-				a_archive.insert(a_file);
-				return a_archive;
-			}
-
-			friend inline archive& operator>>(archive& a_archive, file&& a_file)
-			{
-				a_archive.insert(std::move(a_file));
-				return a_archive;
-			}
-
-			friend inline archive& operator<<(archive& a_archive, const stl::filesystem::path& a_path)
-			{
-				a_archive.write(a_path);
-				return a_archive;
-			}
-
-			friend inline archive& operator<<(archive& a_archive, std::ostream& a_stream)
-			{
-				a_archive.write(a_stream);
-				return a_archive;
-			}
 
 			BSA_NODISCARD inline file front() const noexcept
 			{
@@ -943,7 +907,7 @@ namespace bsa
 
 			inline void write(const stl::filesystem::path& a_path)
 			{
-				std::ofstream file(a_path.c_str(), std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
+				std::ofstream file{ a_path.c_str(), std::ios_base::out | std::ios_base::binary | std::ios_base::trunc };
 				if (!file.is_open()) {
 					throw output_error();
 				} else {
@@ -984,9 +948,9 @@ namespace bsa
 			inline void insert(const file& a_file)
 			{
 				if (!can_insert(a_file.file_ptr())) {
-					throw size_error();
+					throw size_error{};
 				} else if (!a_file || a_file.empty()) {
-					throw empty_file();
+					throw empty_file{};
 				} else if (!contains(a_file)) {
 					reserve(size() + 1);
 					push_back(a_file.file_ptr());
@@ -1002,7 +966,7 @@ namespace bsa
 				while (a_first != a_last) {
 					auto& f = static_cast<const file&>(*a_first);
 					if (!f || f.empty()) {
-						throw empty_file();
+						throw empty_file{};
 					} else if (!contains(f)) {
 						toInsert.push_back(f.file_ptr());
 					}
@@ -1019,7 +983,7 @@ namespace bsa
 				toInsert.erase(newEnd, toInsert.end());
 
 				if (!can_insert(toInsert)) {
-					throw size_error();
+					throw size_error{};
 				}
 
 				reserve(size() + toInsert.size());
@@ -1421,5 +1385,29 @@ namespace bsa
 			container_t _filesByName;
 			detail::header_t _header;
 		};
+
+		inline archive& operator<<(archive& a_archive, const stl::filesystem::path& a_path)
+		{
+			a_archive.read(a_path);
+			return a_archive;
+		}
+
+		inline archive& operator<<(archive& a_archive, const file& a_file)
+		{
+			a_archive.insert(a_file);
+			return a_archive;
+		}
+
+		inline archive& operator>>(archive& a_archive, const stl::filesystem::path& a_path)
+		{
+			a_archive.write(a_path);
+			return a_archive;
+		}
+
+		inline archive& operator>>(archive& a_archive, std::ostream& a_stream)
+		{
+			a_archive.write(a_stream);
+			return a_archive;
+		}
 	}
 }

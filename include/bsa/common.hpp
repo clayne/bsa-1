@@ -19,7 +19,6 @@
 // TODO
 #pragma warning(disable : 4820)	 // 'bytes' bytes padding added after construct 'member_name'
 
-
 static_assert(std::numeric_limits<std::int8_t>::digits + 1 == 8);
 static_assert(std::numeric_limits<std::uint8_t>::digits == 8);
 static_assert(std::numeric_limits<std::int16_t>::digits + 1 == 16);
@@ -28,7 +27,6 @@ static_assert(std::numeric_limits<std::int32_t>::digits + 1 == 32);
 static_assert(std::numeric_limits<std::uint32_t>::digits == 32);
 static_assert(std::numeric_limits<std::int64_t>::digits + 1 == 64);
 static_assert(std::numeric_limits<std::uint64_t>::digits == 64);
-
 
 namespace bsa
 {
@@ -61,7 +59,6 @@ namespace bsa
 		const char* _what;
 	};
 
-
 	// typically thrown when converting from std::size_t to uint32_t/int32_t for writes
 	class size_error : public exception
 	{
@@ -86,7 +83,6 @@ namespace bsa
 		size_error& operator=(size_error&&) = default;
 	};
 
-
 	class hash_error : public exception
 	{
 	private:
@@ -109,7 +105,6 @@ namespace bsa
 		hash_error& operator=(const hash_error&) = default;
 		hash_error& operator=(hash_error&&) = default;
 	};
-
 
 	// non-ascii characters have negative values, and beth doesn't cast them to their unsigned
 	// counterparts while remapping them, so you get something like "remaptable[-17]" which
@@ -137,7 +132,6 @@ namespace bsa
 		hash_non_ascii& operator=(hash_non_ascii&&) = default;
 	};
 
-
 	class hash_empty : public hash_error
 	{
 	private:
@@ -160,7 +154,6 @@ namespace bsa
 		hash_empty& operator=(const hash_empty&) = default;
 		hash_empty& operator=(hash_empty&&) = default;
 	};
-
 
 	class io_error : public exception
 	{
@@ -185,7 +178,6 @@ namespace bsa
 		io_error& operator=(io_error&&) = default;
 	};
 
-
 	class input_error : public io_error
 	{
 	private:
@@ -208,7 +200,6 @@ namespace bsa
 		input_error& operator=(const input_error&) = default;
 		input_error& operator=(input_error&&) = default;
 	};
-
 
 	class version_error : public input_error
 	{
@@ -233,7 +224,6 @@ namespace bsa
 		version_error& operator=(version_error&&) = default;
 	};
 
-
 	class empty_file : public input_error
 	{
 	private:
@@ -256,7 +246,6 @@ namespace bsa
 		empty_file& operator=(const empty_file&) = default;
 		empty_file& operator=(empty_file&&) = default;
 	};
-
 
 	class output_error : public io_error
 	{
@@ -281,7 +270,6 @@ namespace bsa
 		output_error& operator=(output_error&&) = default;
 	};
 
-
 	template <
 		class T,
 		class =
@@ -289,14 +277,12 @@ namespace bsa
 				stl::is_pointer_v<T>>>
 	using observer = T;	 // non-owning raw pointer
 
-
 	template <
 		class T,
 		class =
 			stl::enable_if_t<
 				stl::is_pointer_v<T>>>
 	using owner = T;  // owning raw pointer
-
 
 	namespace detail
 	{
@@ -306,12 +292,16 @@ namespace bsa
 			class From,
 			stl::enable_if_t<
 				stl::conjunction_v<
-					std::disjunction<
+					stl::disjunction<
 						std::is_integral<To>,
 						std::is_enum<To>>,
-					std::disjunction<
+					stl::disjunction<
 						std::is_integral<From>,
-						std::is_enum<From>>>,
+						std::is_enum<From>>,
+					stl::negation<
+						std::is_same<To, bool>>,
+					stl::negation<
+						std::is_same<From, bool>>>,
 				int> = 0>
 		BSA_NODISCARD constexpr To sign_extend(From a_from) noexcept
 		{
@@ -320,19 +310,22 @@ namespace bsa
 			return to;
 		}
 
-
 		// zero extending cast
 		template <
 			class To,
 			class From,
 			stl::enable_if_t<
 				stl::conjunction_v<
-					std::disjunction<
+					stl::disjunction<
 						std::is_integral<To>,
 						std::is_enum<To>>,
-					std::disjunction<
+					stl::disjunction<
 						std::is_integral<From>,
-						std::is_enum<From>>>,
+						std::is_enum<From>>,
+					stl::negation<
+						std::is_same<To, bool>>,
+					stl::negation<
+						std::is_same<From, bool>>>,
 				int> = 0>
 		BSA_NODISCARD constexpr To zero_extend(From a_from) noexcept
 		{
@@ -343,14 +336,12 @@ namespace bsa
 			return to;
 		}
 
-
 		template <class T, std::size_t N>
 		BSA_NODISCARD constexpr decltype(auto) at(T (&a_array)[N], std::size_t a_idx) noexcept
 		{
 			assert(a_idx < N);
 			return a_array[a_idx];
 		}
-
 
 		// Bethesda uses std::tolower to convert chars to lowercase, however
 		// they use the default C locale to convert the characters,
@@ -383,7 +374,6 @@ namespace bsa
 			return MAP[zero_extend<std::size_t>(a_ch)];
 		}
 
-
 		BSA_CXX17_INLINE constexpr auto byte_v{
 			zero_extend<std::size_t>(
 				std::numeric_limits<std::uint8_t>::digits)
@@ -399,15 +389,13 @@ namespace bsa
 				(std::numeric_limits<std::uint32_t>::max)())
 		};
 
-
 		enum class endian
 		{
 			little,
 			big
 		};
 
-
-		class path_t
+		class path_t final
 		{
 		public:
 			using value_type = std::string;
@@ -481,8 +469,7 @@ namespace bsa
 			value_type _impl;
 		};
 
-
-		class istream_t
+		class istream_t final
 		{
 		public:
 			using stream_type = boost::iostreams::mapped_file_source;
@@ -552,7 +539,9 @@ namespace bsa
 			template <
 				class T,
 				stl::enable_if_t<
-					stl::is_integral_v<T>,
+					stl::disjunction_v<
+						std::is_integral<T>,
+						std::is_enum<T>>,
 					int> = 0>
 			inline istream_t& operator>>(T& a_value)
 			{
@@ -561,7 +550,7 @@ namespace bsa
 						(sizeof(T) > sizeof(std::size_t)),
 						stl::make_unsigned_t<T>,
 						std::size_t>;
-				integer_t tmp = 0;
+				integer_t tmp{ 0 };
 
 				switch (_endian) {
 				case endian::little:
@@ -627,7 +616,9 @@ namespace bsa
 			template <
 				class T,
 				stl::enable_if_t<
-					stl::is_integral_v<T>,
+					stl::disjunction_v<
+						std::is_integral<T>,
+						std::is_enum<T>>,
 					int> = 0>
 			inline void seek_rel(T a_off) noexcept
 			{
@@ -695,7 +686,9 @@ namespace bsa
 			template <
 				class T,
 				stl::enable_if_t<
-					stl::is_integral_v<T>,
+					stl::disjunction_v<
+						std::is_integral<T>,
+						std::is_enum<T>>,
 					int> = 0>
 			BSA_NODISCARD inline T ref(size_type a_pos) const
 			{
@@ -707,8 +700,7 @@ namespace bsa
 			endian _endian;
 		};
 
-
-		class ostream_t
+		class ostream_t final
 		{
 		public:
 			using stream_type = std::ostream;
@@ -743,7 +735,9 @@ namespace bsa
 			template <
 				class T,
 				stl::enable_if_t<
-					stl::is_integral_v<T>,
+					stl::disjunction_v<
+						std::is_integral<T>,
+						std::is_enum<T>>,
 					int> = 0>
 			inline ostream_t& operator<<(T a_value)
 			{
@@ -878,8 +872,7 @@ namespace bsa
 			endian _endian;
 		};
 
-
-		class BSA_MAYBE_UNUSED restore_point
+		class BSA_MAYBE_UNUSED restore_point final
 		{
 		public:
 			using stream_type = istream_t;

@@ -6,7 +6,6 @@
 
 #include "bsa/bsa.hpp"
 
-
 namespace stl
 {
 	using namespace bsa::stl;
@@ -40,7 +39,6 @@ namespace stl
 #endif
 	}
 }
-
 
 class stopwatch
 {
@@ -79,24 +77,15 @@ private:
 	std::chrono::time_point<clock_t> _start;
 };
 
-
-void extract_tes3()
-{
-	stl::filesystem::path path("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
-	bsa::tes3::archive archive(path);
-	archive.extract("E:\\Repos\\bsa\\mytest");
-}
-
-
-void compare_tes3(stl::filesystem::path a_lhsP, stl::filesystem::path a_rhsP)
+void compare_files(stl::filesystem::path a_lhsP, stl::filesystem::path a_rhsP)
 {
 	if (stl::filesystem::file_size(a_lhsP) != stl::filesystem::file_size(a_rhsP)) {
 		assert(false);
 	}
 
 	constexpr auto FLAGS = std::ios_base::in | std::ios_base::binary;
-	std::ifstream lhsF(a_lhsP.native(), FLAGS);
-	std::ifstream rhsF(a_rhsP.native(), FLAGS);
+	std::ifstream lhsF{ a_lhsP.native(), FLAGS };
+	std::ifstream rhsF{ a_rhsP.native(), FLAGS };
 
 	do {
 		if (lhsF.get() != rhsF.get()) {
@@ -121,20 +110,31 @@ void compare_tes3(stl::filesystem::path a_lhsP, stl::filesystem::path a_rhsP)
 	}
 }
 
+void extract_tes3()
+{
+	stl::filesystem::path path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
+	bsa::tes3::archive archive{ path };
+	archive.extract("E:\\Repos\\bsa\\mytest");
+}
 
 void write_tes3()
 {
-	bsa::tes3::archive archive("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
-	archive << "E:\\Repos\\bsa\\mytest.bsa";
-	compare_tes3("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa", "E:\\Repos\\bsa\\mytest.bsa");
-}
+	stl::filesystem::path lhsP{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
+	stl::filesystem::path rhsP{ "E:\\Repos\\bsa\\mytest.bsa" };
 
+	bsa::tes3::archive archive{ lhsP };
+	archive >> rhsP;
+	compare_files(lhsP, rhsP);
+}
 
 void repack_tes3()
 {
+	stl::filesystem::path lhsP{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
+	stl::filesystem::path rhsP{ "E:\\Repos\\bsa\\mytest.bsa" };
+
 	bsa::tes3::archive archive;
 	std::vector<bsa::tes3::file> files;
-	stl::filesystem::path root = "E:\\Repos\\bsa\\mytest";
+	stl::filesystem::path root{ "E:\\Repos\\bsa\\mytest" };
 	for (auto& dirEntry : stl::filesystem::recursive_directory_iterator(root)) {
 		if (stl::filesystem::is_regular_file(dirEntry)) {
 			files.emplace_back(stl::filesystem::relative(dirEntry.path(), root).string(), dirEntry.path());
@@ -142,10 +142,9 @@ void repack_tes3()
 	}
 
 	archive.insert(files.begin(), files.end());
-	archive << "E:\\Repos\\bsa\\mytest.bsa";
-	compare_tes3("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa", "E:\\Repos\\bsa\\mytest.bsa");
+	archive >> rhsP;
+	compare_files(lhsP, rhsP);
 }
-
 
 void parse_tes3()
 {
@@ -154,31 +153,31 @@ void parse_tes3()
 	};
 
 	stl::filesystem::path path;
-	std::regex regex(".*.bsa$", std::regex_constants::grep | std::regex_constants::icase);
+	std::regex regex{ ".*\\.bsa$", std::regex_constants::grep | std::regex_constants::icase };
 	bsa::tes3::archive archive;
-	std::ios_base::sync_with_stdio(false);
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
 
-		for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
-			if (!std::regex_match(sysEntry.path().string(), regex)) {
-				continue;
-			}
-
-			archive >> sysEntry.path();
-			for (auto& file : archive) {
-				if (!archive.contains(file)) {
-					assert(false);
-				} else if (!archive.find(file.string())) {
-					assert(false);
+		try {
+			for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
+				if (!std::regex_match(sysEntry.path().string(), regex)) {
+					continue;
 				}
-				std::cout << file.string() << '\n';
+
+				archive >> sysEntry.path();
+				for (auto& file : archive) {
+					if (!archive.contains(file)) {
+						assert(false);
+					} else if (!archive.find(file.string())) {
+						assert(false);
+					}
+					std::cout << file.string() << '\n';
+				}
 			}
-		}
+		} catch (const stl::filesystem::filesystem_error&) {}
 	}
 }
-
 
 void parse_tes4()
 {
@@ -191,9 +190,8 @@ void parse_tes4()
 	};
 
 	stl::filesystem::path path;
-	std::regex regex(".*.bsa$", std::regex_constants::grep | std::regex_constants::icase);
+	std::regex regex{ ".*\\.bsa$", std::regex_constants::grep | std::regex_constants::icase };
 	bsa::tes4::archive archive;
-	std::ios_base::sync_with_stdio(false);
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
@@ -216,6 +214,15 @@ void parse_tes4()
 	}
 }
 
+void write_tes4()
+{
+	stl::filesystem::path lhsP{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim Special Edition\\Data\\Skyrim - Textures8.bsa" };
+	stl::filesystem::path rhsP{ "E:\\Repos\\bsa\\mytest.bsa" };
+
+	bsa::tes4::archive archive{ lhsP };
+	archive >> rhsP;
+	compare_files(lhsP, rhsP);
+}
 
 void parse_fo4()
 {
@@ -224,9 +231,8 @@ void parse_fo4()
 	};
 
 	stl::filesystem::path path;
-	std::regex regex(".*.ba2$", std::regex_constants::grep | std::regex_constants::icase);
+	std::regex regex{ ".*\\.ba2$", std::regex_constants::grep | std::regex_constants::icase };
 	bsa::fo4::archive archive;
-	std::ios_base::sync_with_stdio(false);
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
@@ -244,9 +250,9 @@ void parse_fo4()
 	}
 }
 
-
 int main(int, const char*[])
 {
+	std::ios_base::sync_with_stdio(false);
 	stopwatch watch;
 	watch.start();
 
@@ -255,12 +261,10 @@ int main(int, const char*[])
 	//write_tes3();
 	//parse_tes3();
 
-	parse_tes4();
+	//parse_tes4();
+	write_tes4();
 
 	//parse_fo4();
-
-	//bsa::sse::archive archive;
-	//archive >> R"(E:\Games\SteamLibrary\steamapps\common\Skyrim Special Edition\Data\Skyrim - Textures8.bsa)";
 
 #if 0
 	{

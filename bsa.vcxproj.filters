@@ -48,4 +48,7 @@
   <ItemGroup>
     <Natvis Include="bsa.natvis" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include=".clang-format" />
+  </ItemGroup>
 </Project>

@@ -7,6 +7,38 @@
 #include <type_traits>
 #include <utility>
 
+#define BSA_MAKE_ENUM_OPERATOR_PAIR(a_type, a_op)                                     \
+	static_assert(stl::is_enum_v<a_type>, "\'" #a_type "\' is not an enum");          \
+                                                                                      \
+	BSA_NODISCARD constexpr a_type operator a_op(a_type a_lhs, a_type a_rhs) noexcept \
+	{                                                                                 \
+		return static_cast<a_type>(                                                   \
+			static_cast<stl::underlying_type_t<a_type>>(a_lhs)                        \
+				a_op static_cast<stl::underlying_type_t<a_type>>(a_rhs));             \
+	}                                                                                 \
+                                                                                      \
+	constexpr a_type& operator a_op##=(a_type& a_lhs, a_type a_rhs) noexcept          \
+	{                                                                                 \
+		return a_lhs =                                                                \
+				   static_cast<a_type>(                                               \
+					   static_cast<stl::underlying_type_t<a_type>>(a_lhs)             \
+						   a_op static_cast<stl::underlying_type_t<a_type>>(a_rhs));  \
+	}
+
+#define BSA_MAKE_ALL_ENUM_OPERATORS(a_type)                                  \
+	static_assert(stl::is_enum_v<a_type>, "\'" #a_type "\' is not an enum"); \
+                                                                             \
+	BSA_NODISCARD constexpr a_type operator~(a_type a_val) noexcept          \
+	{                                                                        \
+		return static_cast<a_type>(                                          \
+			~static_cast<stl::underlying_type_t<a_type>>(a_val));            \
+	}                                                                        \
+                                                                             \
+	BSA_MAKE_ENUM_OPERATOR_PAIR(a_type, ^);                                  \
+	BSA_MAKE_ENUM_OPERATOR_PAIR(a_type, &);                                  \
+	BSA_MAKE_ENUM_OPERATOR_PAIR(a_type, |);                                  \
+	BSA_MAKE_ENUM_OPERATOR_PAIR(a_type, <<);                                 \
+	BSA_MAKE_ENUM_OPERATOR_PAIR(a_type, >>);
 
 #if __cplusplus >= 201402L	// C++14
 
@@ -64,7 +96,6 @@ namespace bsa
 }
 
 #endif	// C++14
-
 
 #if __cplusplus >= 201703L	// C++17
 
@@ -266,6 +297,8 @@ namespace bsa
 		{
 		};
 
+		BSA_MAKE_ALL_ENUM_OPERATORS(byte);
+
 		template <
 			class IntegerType,
 			stl::enable_if_t<
@@ -279,7 +312,6 @@ namespace bsa
 }
 
 #endif	// C++17
-
 
 #if __cplusplus >= 202002L	// C++20
 
@@ -341,7 +373,6 @@ namespace bsa
 		template <class T, stl::enable_if_t<stl::is_unsigned_v<T>, int> = 0>
 		BSA_NODISCARD constexpr T rotr(T a_val, int a_pos) noexcept;
 
-
 		template <
 			class T,
 			stl::enable_if_t<
@@ -359,7 +390,6 @@ namespace bsa
 				return (a_val << rot) | (a_val >> (N - rot));
 			}
 		}
-
 
 		template <
 			class T,
@@ -407,7 +437,6 @@ namespace bsa
 }
 
 #endif	// C++20
-
 
 namespace bsa
 {

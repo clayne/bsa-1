@@ -7,6 +7,9 @@
 #include "bsa/tes4.hpp"
 #include "bsa/tes5.hpp"
 
+#undef BSA_MAKE_ALL_ENUM_OPERATORS
+#undef BSA_MAKE_ENUM_OPERATOR_PAIR
+
 #undef BSA_CXX14_CONSTEXPR
 #undef BSA_CXX14_NOEXCEPT
 

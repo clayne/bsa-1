@@ -14,7 +14,6 @@
 #include <utility>
 #include <vector>
 
-
 namespace bsa
 {
 	namespace fo4  // Fallout 4
@@ -22,18 +21,15 @@ namespace bsa
 		using archive_version = std::size_t;
 		BSA_CXX17_INLINE constexpr archive_version v1{ 1 };
 
-
 		namespace detail
 		{
 			using namespace bsa::detail;
-
 
 			class file_hasher;
 			class general_t;
 			class hash_t;
 			class header_t;
 			class texture_t;
-
 
 			class header_t
 			{
@@ -112,7 +108,6 @@ namespace bsa
 				block_t _block;
 			};
 
-
 			class hash_t
 			{
 			public:
@@ -187,7 +182,6 @@ namespace bsa
 				block_t _block;
 			};
 			using hash_ref = std::reference_wrapper<hash_t>;
-
 
 			class general_t
 			{
@@ -308,7 +302,6 @@ namespace bsa
 				std::string _name;
 			};
 			using general_ptr = std::shared_ptr<general_t>;
-
 
 			class texture_t
 			{
@@ -468,7 +461,6 @@ namespace bsa
 			};
 			using texture_ptr = std::shared_ptr<texture_t>;
 
-
 			class file_hasher
 			{
 			public:
@@ -597,14 +589,12 @@ namespace bsa
 			};
 		}
 
-
 		class directory;
 		class file_entry;
 		class file_iterator;
 		class general_file;
 		class hash;
 		class texture_file;
-
 
 		class hash
 		{
@@ -637,7 +627,6 @@ namespace bsa
 			detail::hash_ref _impl;
 		};
 
-
 		class general_file
 		{
 		public:
@@ -668,7 +657,6 @@ namespace bsa
 		private:
 			value_type _impl;
 		};
-
 
 		class texture_file
 		{
@@ -706,7 +694,6 @@ namespace bsa
 		private:
 			value_type _impl;
 		};
-
 
 		class file_entry
 		{
@@ -782,7 +769,6 @@ namespace bsa
 
 			stl::variant<stl::monostate, general_file_t, texture_file_t> _impl;
 		};
-
 
 		class file_iterator
 		{
@@ -892,7 +878,6 @@ namespace bsa
 			stl::optional<std::vector<value_type>> _files;
 			std::size_t _pos;
 		};
-
 
 		class archive
 		{
