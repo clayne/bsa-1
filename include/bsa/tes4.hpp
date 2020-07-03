@@ -35,10 +35,11 @@ namespace bsa
 			retain_strings_during_startup = 1 << 7,
 			embedded_file_names = 1 << 8,
 			xbox_compressed = 1 << 9,
+			unknown = 1 << 10,
 
 			all =
 #if 0
-			static_cast<stl::underlying_type_t<archive_flag>>(-1)
+				static_cast<stl::underlying_type_t<archive_flag>>(-1)
 #else
 				directory_strings |
 				file_strings |
@@ -49,7 +50,8 @@ namespace bsa
 				xbox_archive |
 				retain_strings_during_startup |
 				embedded_file_names |
-				xbox_compressed
+				xbox_compressed |
+				unknown
 #endif
 		};
 
@@ -71,7 +73,7 @@ namespace bsa
 
 			all =
 #if 0
-			static_cast<stl::underlying_type_t<archive_type>>(-1)
+				static_cast<stl::underlying_type_t<archive_type>>(-1)
 #else
 				meshes |
 				textures |
@@ -200,14 +202,39 @@ namespace bsa
 
 				BSA_NODISCARD constexpr bool compressed() const noexcept { return (flags() & archive_flag::compressed) != archive_flag::none; }
 				BSA_NODISCARD constexpr bool directory_strings() const noexcept { return (flags() & archive_flag::directory_strings) != archive_flag::none; }
-				BSA_NODISCARD constexpr bool embedded_file_names() const noexcept { return (flags() & archive_flag::embedded_file_names) != archive_flag::none; }
+
+				BSA_NODISCARD constexpr bool embedded_file_names() const noexcept
+				{
+					switch (version()) {
+					case v103:
+						return false;
+					case v104:
+					case v105:
+						return (flags() & archive_flag::embedded_file_names) != archive_flag::none;
+					default:
+						return false;
+					}
+				}
+
 				BSA_NODISCARD constexpr bool file_strings() const noexcept { return (flags() & archive_flag::file_strings) != archive_flag::none; }
 				BSA_NODISCARD constexpr bool retain_directory_names() const noexcept { return (flags() & archive_flag::retain_directory_names) != archive_flag::none; }
 				BSA_NODISCARD constexpr bool retain_file_names() const noexcept { return (flags() & archive_flag::retain_file_names) != archive_flag::none; }
 				BSA_NODISCARD constexpr bool retain_file_name_offsets() const noexcept { return (flags() & archive_flag::retain_file_name_offsets) != archive_flag::none; }
 				BSA_NODISCARD constexpr bool retain_strings_during_startup() const noexcept { return (flags() & archive_flag::retain_strings_during_startup) != archive_flag::none; }
 				BSA_NODISCARD constexpr bool xbox_archive() const noexcept { return (flags() & archive_flag::xbox_archive) != archive_flag::none; }
-				BSA_NODISCARD constexpr bool xbox_compressed() const noexcept { return (flags() & archive_flag::xbox_compressed) != archive_flag::none; }
+
+				BSA_NODISCARD constexpr bool xbox_compressed() const noexcept
+				{
+					switch (version()) {
+					case v103:
+						return false;
+					case v104:
+					case v105:
+						return (flags() & archive_flag::xbox_compressed) != archive_flag::none;
+					default:
+						return false;
+					}
+				}
 
 				constexpr bool compressed(bool a_set) noexcept { return set_flags(a_set, archive_flag::compressed); }
 				constexpr bool directory_strings(bool a_set) noexcept { return set_flags(a_set, archive_flag::directory_strings); }
@@ -256,7 +283,7 @@ namespace bsa
 				}
 
 			private:
-				struct block_t	// BSArchiveHeader
+				struct block_t final  // BSArchiveHeader
 				{
 					constexpr block_t() noexcept :
 						tag{ '\0', '\0', '\0', '\0' },
@@ -268,6 +295,10 @@ namespace bsa
 						directoryNamesLength(0),
 						fileNamesLength(0),
 						archiveTypes(archive_type::none)
+#ifdef BSA_PRESERVE_PADDING
+						,
+						pad(0)
+#endif
 					{}
 
 					constexpr block_t(const block_t&) noexcept = default;
@@ -290,12 +321,15 @@ namespace bsa
 							directoryNamesLength >>
 							fileNamesLength >>
 							archiveTypes;
+#ifdef BSA_PRESERVE_PADDING
+						a_input >> pad;
+#else
 						a_input.seek_rel(2);
+#endif
 					}
 
 					inline void write(ostream_t& a_output, bool a_directoryStrings, bool a_fileStrings) const
 					{
-						constexpr std::uint16_t pad = 0;
 						const auto myDirectoryNamesLength = a_directoryStrings ? directoryNamesLength : 0;
 						const auto myFileNamesLength = a_fileStrings ? fileNamesLength : 0;
 
@@ -308,8 +342,12 @@ namespace bsa
 							<< fileCount
 							<< myDirectoryNamesLength
 							<< myFileNamesLength
-							<< archiveTypes
-							<< pad;
+							<< archiveTypes;
+
+#ifndef BSA_PRESERVE_PADDING
+						constexpr std::uint16_t pad{ 0 };
+#endif
+						a_output << pad;
 					}
 
 					std::array<char, 4> tag;
@@ -321,7 +359,9 @@ namespace bsa
 					std::uint32_t directoryNamesLength;
 					std::uint32_t fileNamesLength;
 					archive_type archiveTypes;
-					//uint16_t pad;
+#ifdef BSA_PRESERVE_PADDING
+					std::uint16_t pad;
+#endif
 				};
 
 				constexpr bool set_flags(bool a_set, archive_flag a_mask) noexcept
@@ -381,21 +421,14 @@ namespace bsa
 						zero_extend<std::uint64_t>(_block.crc) << 4 * byte_v);
 				}
 
-				inline void read(istream_t& a_input, const header_t& a_header)
-				{
-					_block.read(a_input, a_header);
-				}
-
-				inline void write(ostream_t& a_output, const header_t& a_header) const
-				{
-					_block.write(a_output, a_header);
-				}
+				inline void read(istream_t& a_input, const header_t& a_header) { _block.read(a_input, a_header); }
+				inline void write(ostream_t& a_output, const header_t& a_header) const { _block.write(a_output, a_header); }
 
 			protected:
 				friend class dir_hasher;
 				friend class file_hasher;
 
-				struct block_t	// BSHash
+				struct block_t final  // BSHash
 				{
 					constexpr block_t() noexcept :
 						last(0),
@@ -515,6 +548,13 @@ namespace bsa
 
 				BSA_NODISCARD constexpr std::size_t size() const noexcept { return zero_extend<std::size_t>(_block.size); }
 
+				BSA_NODISCARD constexpr std::size_t uncompressed_size() const noexcept
+				{
+					return _uncompressedSize ?
+							   zero_extend<std::size_t>(*_uncompressedSize) :
+							   zero_extend<std::size_t>(_block.size);
+				}
+
 				BSA_NODISCARD inline std::string str() const { return _name; }
 				BSA_NODISCARD constexpr const std::string& str_ref() const noexcept { return _name; }
 
@@ -542,6 +582,12 @@ namespace bsa
 						_data.emplace<iview>(std::move(a_data));
 						_block.size = zero_extend<std::uint32_t>(a_data.size());
 						_block.compressed = a_compressed;
+
+						if (a_compressed) {
+							_uncompressedSize.emplace(_block.size);	 // TODO: Get actual uncompressed size
+						} else {
+							_uncompressedSize.reset();
+						}
 					}
 				}
 
@@ -553,6 +599,12 @@ namespace bsa
 						_data.emplace<ifile>(std::move(a_input));
 						_block.size = zero_extend<std::uint32_t>(a_input.size());
 						_block.compressed = a_compressed;
+
+						if (a_compressed) {
+							_uncompressedSize.emplace(_block.size);	 // TODO: Get actual uncompressed size
+						} else {
+							_uncompressedSize.reset();
+						}
 					}
 				}
 
@@ -560,9 +612,6 @@ namespace bsa
 				{
 					_hash.read(a_input, a_header);
 					_block.read(a_input, a_header);
-					if (!a_header.compressed()) {
-						_uncompressedSize.emplace(_block.size);
-					}
 				}
 
 				inline void read_name(istream_t& a_input)
@@ -585,12 +634,14 @@ namespace bsa
 						std::uint8_t len{ 0 };
 						a_input >> len;
 						a_input.seek_rel(len);
-						_block.size -= (std::min<std::uint32_t>)(_block.size, zero_extend<std::uint32_t>(len + 1));
+						_block.size -= (std::min)(_block.size, zero_extend<std::uint32_t>(len + 1));
 					}
 
-					if (a_header.compressed()) {
-						_uncompressedSize.emplace(0);
-						a_input >> *_uncompressedSize;
+					if (compressed()) {
+						std::uint32_t t{ 0 };
+						a_input >> t;
+						_uncompressedSize.emplace(t);
+						_block.size -= (std::min<std::uint32_t>)(_block.size, 4);
 					}
 
 					_data.emplace<iarchive>(
@@ -636,7 +687,7 @@ namespace bsa
 						a_output << stl::string_view{ _name };
 					}
 
-					if (a_header.compressed()) {
+					if (compressed()) {
 						if (!_uncompressedSize) {
 							throw output_error();
 						} else {
@@ -645,11 +696,7 @@ namespace bsa
 					}
 
 					const auto data = get_data();
-					if (!data.empty()) {
-						a_output << data;
-					} else {
-						throw output_error();
-					}
+					a_output << data;
 				}
 
 			private:
@@ -666,7 +713,7 @@ namespace bsa
 				using file_type = istream_t;
 				using archive_type = std::pair<stl::span<const stl::byte>, istream_t>;
 
-				struct block_t	// BSFileEntry
+				struct block_t final  // BSFileEntry
 				{
 					enum : std::uint32_t
 					{
@@ -695,11 +742,7 @@ namespace bsa
 							offset;
 
 						compressed = size & icompression ? !a_header.compressed() : a_header.compressed();
-
 						size &= ~(icompression | ichecked);
-						if (a_header.compressed()) {
-							size -= (std::min<std::uint32_t>)(size, 4);
-						}
 					}
 
 					inline void write(ostream_t& a_output, const header_t& a_header, std::size_t a_dirLength, std::size_t a_fileLength) const
@@ -712,7 +755,7 @@ namespace bsa
 							mySize += zero_extend<std::uint32_t>(a_fileLength);
 						}
 
-						if (a_header.compressed()) {
+						if (compressed) {
 							mySize += 4;  // uncompressed size
 						}
 
@@ -801,6 +844,8 @@ namespace bsa
 
 				BSA_NODISCARD inline bool empty() const noexcept { return _files.empty(); }
 
+				inline void sort() { std::sort(_files.begin(), _files.end(), file_sorter()); }
+
 				inline void read(istream_t& a_input, const header_t& a_header)
 				{
 					_hash.read(a_input, a_header);
@@ -858,11 +903,34 @@ namespace bsa
 				}
 
 			private:
-				struct block_t	// BSDirectoryEntry
+				class file_sorter final
+				{
+				public:
+					using value_type = detail::file_ptr;
+
+					BSA_NODISCARD inline bool operator()(const value_type& a_lhs, const value_type& a_rhs) const noexcept
+					{
+						return a_lhs->hash_ref() < a_rhs->hash_ref();
+					}
+
+					BSA_NODISCARD inline bool operator()(const value_type& a_lhs, const detail::hash_t& a_rhs) const noexcept
+					{
+						return a_lhs->hash_ref() < a_rhs;
+					}
+				};
+
+				struct block_t final  // BSDirectoryEntry
 				{
 					constexpr block_t() noexcept :
 						fileCount(0),
+#ifdef BSA_PRESERVE_PADDING
+						pad1(0),
+#endif
 						fileOffset(0)
+#ifdef BSA_PRESERVE_PADDING
+						,
+						pad2(0)
+#endif
 					{}
 
 					constexpr block_t(const block_t&) noexcept = default;
@@ -884,9 +952,17 @@ namespace bsa
 							break;
 						case v105:
 							a_input >> fileCount;
+#ifdef BSA_PRESERVE_PADDING
+							a_input >> pad1;
+#else
 							a_input.seek_rel(4);
+#endif
 							a_input >> fileOffset;
+#ifdef BSA_PRESERVE_PADDING
+							a_input >> pad2;
+#else
 							a_input.seek_rel(4);
+#endif
 							break;
 						default:
 							throw version_error();
@@ -895,7 +971,10 @@ namespace bsa
 
 					inline void write(ostream_t& a_output, const header_t& a_header) const
 					{
-						std::uint32_t pad = 0;
+#ifndef BSA_PRESERVE_PADDING
+						constexpr std::uint32_t pad1{ 0 };
+						constexpr std::uint32_t pad2{ 0 };
+#endif
 						switch (a_header.version()) {
 						case v103:
 						case v104:
@@ -904,10 +983,11 @@ namespace bsa
 								<< fileOffset;
 							break;
 						case v105:
-							a_output << fileCount;
-							a_output << pad;
-							a_output << fileOffset;
-							a_output << pad;
+							a_output
+								<< fileCount
+								<< pad1
+								<< fileOffset
+								<< pad2;
 							break;
 						default:
 							throw output_error();
@@ -915,9 +995,13 @@ namespace bsa
 					}
 
 					std::uint32_t fileCount;
-					//uint32_t pad;	x64
+#ifdef BSA_PRESERVE_PADDING
+					std::uint32_t pad1;	 // x64
+#endif
 					std::uint32_t fileOffset;
-					//uint32_t pad;	x64
+#ifdef BSA_PRESERVE_PADDING
+					std::uint32_t pad2;	 // x64
+#endif
 				};
 
 				inline void read_extra(istream_t& a_input, const header_t& a_header)
@@ -1595,7 +1679,7 @@ namespace bsa
 
 				input.seek_beg(header_size());
 				for (std::size_t i = 0; i < directory_count(); ++i) {
-					auto dir = std::make_shared<detail::directory_t>();
+					const auto dir = std::make_shared<detail::directory_t>();
 					dir->read(input, _header);
 					_dirs.push_back(std::move(dir));
 				}
@@ -1605,12 +1689,12 @@ namespace bsa
 				input.seek_rel(offset);
 
 				if (file_strings()) {
-					for (auto& dir : _dirs) {
+					for (const auto& dir : _dirs) {
 						dir->read_file_names(input);
 					}
 				}
 
-				for (auto& dir : _dirs) {
+				for (const auto& dir : _dirs) {
 					dir->read_file_data(input, _header);
 				}
 
@@ -1660,7 +1744,7 @@ namespace bsa
 			using container_t = std::vector<detail::directory_ptr>;
 			using iterator_t = typename container_t::iterator;
 
-			class directory_sorter
+			class directory_sorter final
 			{
 			public:
 				using value_type = detail::directory_ptr;
@@ -1729,6 +1813,9 @@ namespace bsa
 			inline void sort()
 			{
 				std::sort(_dirs.begin(), _dirs.end(), directory_sorter());
+				for (auto& dir : _dirs) {
+					dir->sort();
+				}
 			}
 
 			inline bool sanity_check()
@@ -1793,7 +1880,7 @@ namespace bsa
 							offset += 1 + (dir->name_size() - 1) + 1 + (file->name_size() - 1);
 						}
 
-						if (compressed()) {
+						if (file->compressed()) {
 							offset += 4;
 						}
 

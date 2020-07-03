@@ -559,7 +559,7 @@ namespace bsa
 					}
 					break;
 				case endian::big:
-					for (auto i = zero_extend<std::ptrdiff_t>(sizeof(T)); i >= 0; --i) {
+					for (auto i = zero_extend<std::ptrdiff_t>(sizeof(T)) - 1; i >= 0; --i) {
 						tmp |= ref<integer_t>(_pos++) << i * byte_v;
 					}
 					break;
@@ -761,7 +761,7 @@ namespace bsa
 					}
 					break;
 				case endian::big:
-					for (auto i = zero_extend<std::ptrdiff_t>(sizeof(T)); i >= 0; --i) {
+					for (auto i = zero_extend<std::ptrdiff_t>(sizeof(T)) - 1; i >= 0; --i) {
 						*it++ = zero_extend<stl::byte>((value >> i * byte_v) & MASK);
 					}
 					break;
@@ -831,7 +831,9 @@ namespace bsa
 
 			inline ostream_t& write(observer<const char_type*> a_str, std::streamsize a_count)
 			{
-				_stream.write(a_str, a_count);
+				if (a_count > 0) {
+					_stream.write(a_str, a_count);
+				}
 				return *this;
 			}
 

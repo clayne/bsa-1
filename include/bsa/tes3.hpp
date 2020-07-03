@@ -87,7 +87,7 @@ namespace bsa
 				}
 
 			private:
-				struct block_t
+				struct block_t final
 				{
 					constexpr block_t() noexcept :
 						version(v256),
@@ -156,7 +156,7 @@ namespace bsa
 			protected:
 				friend class file_hasher;
 
-				struct block_t
+				struct block_t final
 				{
 					constexpr block_t() noexcept :
 						lo(0),
@@ -424,11 +424,7 @@ namespace bsa
 				inline void write_data(ostream_t& a_output) const
 				{
 					const auto data = get_data();
-					if (!data.empty()) {
-						a_output << data;
-					} else {
-						throw output_error();
-					}
+					a_output << data;
 				}
 
 			private:
@@ -445,7 +441,7 @@ namespace bsa
 				using file_type = istream_t;
 				using archive_type = std::pair<stl::span<const stl::byte>, istream_t>;
 
-				struct block_t
+				struct block_t final
 				{
 					constexpr block_t() noexcept :
 						size(0),
@@ -1057,7 +1053,7 @@ namespace bsa
 			using container_t = std::vector<value_t>;
 			using iterator_t = typename container_t::iterator;
 
-			class file_sorter
+			class file_sorter final
 			{
 			public:
 				BSA_NODISCARD inline bool operator()(const value_t& a_lhs, const value_t& a_rhs) const noexcept
@@ -1071,7 +1067,7 @@ namespace bsa
 				}
 			};
 
-			class file_name_sorter
+			class file_name_sorter final
 			{
 			public:
 				BSA_NODISCARD inline bool operator()(const value_t& a_lhs, const value_t& a_rhs) const noexcept

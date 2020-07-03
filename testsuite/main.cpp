@@ -1,8 +1,14 @@
+#define BSA_PRESERVE_PADDING
+
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
-#include <regex>
+#include <sstream>
 #include <type_traits>
+
+#include <boost/iostreams/device/mapped_file.hpp>
+#include <boost/regex.hpp>
 
 #include "bsa/bsa.hpp"
 
@@ -37,6 +43,40 @@ namespace stl
 			return a_entry.status().type() == boost::filesystem::file_type::regular_file;
 		}
 #endif
+	}
+}
+
+enum class color
+{
+	red,
+	green
+};
+
+namespace util
+{
+	template <class... Args>
+	void print(color a_color, Args... a_args)
+	{
+		constexpr const char SGR[] = "\033[0m";
+		constexpr const char RED[] = "\x1B[31m";
+		constexpr const char GREEN[] = "\x1B[32m";
+
+		std::stringstream ss;
+		switch (a_color) {
+		case color::red:
+			ss << RED;
+			break;
+		case color::green:
+			ss << GREEN;
+			break;
+		default:
+			assert(false);
+			return;
+		}
+
+		((ss << a_args), ...);
+		ss << SGR;
+		std::cout << ss.str();
 	}
 }
 
@@ -79,35 +119,24 @@ private:
 
 void compare_files(stl::filesystem::path a_lhsP, stl::filesystem::path a_rhsP)
 {
-	if (stl::filesystem::file_size(a_lhsP) != stl::filesystem::file_size(a_rhsP)) {
-		assert(false);
+	boost::iostreams::mapped_file_source lhsF{ a_lhsP.string() };
+	boost::iostreams::mapped_file_source rhsF{ a_rhsP.string() };
+
+	if (lhsF.size() != rhsF.size()) {
+		util::print(color::red, "FAIL (size: ", lhsF.size(), " != size: ", rhsF.size(), ")\n");
+		return;
 	}
 
-	constexpr auto FLAGS = std::ios_base::in | std::ios_base::binary;
-	std::ifstream lhsF{ a_lhsP.native(), FLAGS };
-	std::ifstream rhsF{ a_rhsP.native(), FLAGS };
-
-	do {
-		if (lhsF.get() != rhsF.get()) {
-			char lhsC;
-			lhsF.seekg(-1, std::ios_base::cur);
-			auto lhsPos = lhsF.tellg();
-			lhsF.get(lhsC);
-
-			char rhsC;
-			rhsF.seekg(-1, std::ios_base::cur);
-			auto rhsPos = rhsF.tellg();
-			rhsF.get(rhsC);
-
-			std::cout << "Comparison failure!\n";
-			assert(false);
-			return;
+	if (std::memcmp(lhsF.data(), rhsF.data(), lhsF.size()) != 0) {
+		for (std::size_t i = 0; i < lhsF.size(); ++i) {
+			if (lhsF.data()[i] != rhsF.data()[i]) {
+				util::print(color::red, "FAIL (at pos ", i, ")\n");
+				return;
+			}
 		}
-	} while (lhsF && rhsF);
-
-	if (!lhsF.eof() || !rhsF.eof()) {
-		assert(false);
 	}
+
+	util::print(color::green, "PASS\n");
 }
 
 void extract_tes3()
@@ -153,7 +182,7 @@ void parse_tes3()
 	};
 
 	stl::filesystem::path path;
-	std::regex regex{ ".*\\.bsa$", std::regex_constants::grep | std::regex_constants::icase };
+	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
 	bsa::tes3::archive archive;
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
@@ -161,7 +190,7 @@ void parse_tes3()
 
 		try {
 			for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
-				if (!std::regex_match(sysEntry.path().string(), regex)) {
+				if (!boost::regex_match(sysEntry.path().string(), regex)) {
 					continue;
 				}
 
@@ -190,7 +219,7 @@ void parse_tes4()
 	};
 
 	stl::filesystem::path path;
-	std::regex regex{ ".*\\.bsa$", std::regex_constants::grep | std::regex_constants::icase };
+	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
 	bsa::tes4::archive archive;
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
@@ -198,7 +227,7 @@ void parse_tes4()
 
 		try {
 			for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
-				if (!std::regex_match(sysEntry.path().string(), regex)) {
+				if (!boost::regex_match(sysEntry.path().string(), regex)) {
 					continue;
 				}
 
@@ -216,12 +245,33 @@ void parse_tes4()
 
 void write_tes4()
 {
-	stl::filesystem::path lhsP{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim Special Edition\\Data\\Skyrim - Textures8.bsa" };
-	stl::filesystem::path rhsP{ "E:\\Repos\\bsa\\mytest.bsa" };
+	// ignore "Oblivion - Meshes.bsa", valid but non-standard pack
+	constexpr const char* PATHS[] = {
+		"E:\\Games\\SteamLibrary\\steamapps\\common\\Oblivion\\Data"
+	};
 
-	bsa::tes4::archive archive{ lhsP };
-	archive >> rhsP;
-	compare_files(lhsP, rhsP);
+	stl::filesystem::path rhsP{ "E:\\Repos\\bsa\\mytest.bsa" };
+	stl::filesystem::path path;
+	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
+	bsa::tes4::archive archive;
+
+	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
+		path = PATHS[i];
+
+		try {
+			for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
+				if (!boost::regex_match(sysEntry.path().string(), regex)) {
+					continue;
+				}
+
+				const auto& lhsP = sysEntry.path();
+				archive << lhsP;
+				archive >> rhsP;
+				std::cout << lhsP << ' ';
+				compare_files(lhsP, rhsP);
+			}
+		} catch (const stl::filesystem::filesystem_error&) {}
+	}
 }
 
 void parse_fo4()
@@ -231,14 +281,14 @@ void parse_fo4()
 	};
 
 	stl::filesystem::path path;
-	std::regex regex{ ".*\\.ba2$", std::regex_constants::grep | std::regex_constants::icase };
+	boost::regex regex{ ".*\\.ba2$", boost::regex_constants::grep | boost::regex_constants::icase };
 	bsa::fo4::archive archive;
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
 
 		for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
-			if (!std::regex_match(sysEntry.path().string(), regex)) {
+			if (!boost::regex_match(sysEntry.path().string(), regex)) {
 				continue;
 			}
 
