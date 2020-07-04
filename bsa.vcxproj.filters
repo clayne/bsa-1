@@ -39,6 +39,9 @@
     <ClInclude Include="include\bsa\tes5.hpp">
       <Filter>include\bsa</Filter>
     </ClInclude>
+    <ClInclude Include="testsuite\mstream.hpp">
+      <Filter>testsuite</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="testsuite\main.cpp">

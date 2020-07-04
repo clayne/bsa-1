@@ -7,9 +7,9 @@
 #include <type_traits>
 #include <utility>
 
+#include <boost/filesystem.hpp>
+
 #define BSA_MAKE_ENUM_OPERATOR_PAIR(a_type, a_op)                                     \
-	static_assert(stl::is_enum_v<a_type>, "\'" #a_type "\' is not an enum");          \
-                                                                                      \
 	BSA_NODISCARD constexpr a_type operator a_op(a_type a_lhs, a_type a_rhs) noexcept \
 	{                                                                                 \
 		return static_cast<a_type>(                                                   \
@@ -116,13 +116,6 @@ namespace bsa
 {
 	namespace stl
 	{
-		namespace filesystem
-		{
-			using std::filesystem::create_directories;
-			using std::filesystem::exists;
-			using std::filesystem::path;
-		}
-
 		template <class CharT>
 		using basic_string_view = std::basic_string_view<CharT>;
 		using std::string_view;
@@ -169,7 +162,6 @@ namespace bsa
 #define BSA_MAYBE_UNUSED
 #define BSA_NODISCARD
 
-#include <boost/filesystem.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/string_ref.hpp>
 #include <boost/variant2/variant.hpp>
@@ -178,13 +170,6 @@ namespace bsa
 {
 	namespace stl
 	{
-		namespace filesystem
-		{
-			using boost::filesystem::create_directories;
-			using boost::filesystem::exists;
-			using boost::filesystem::path;
-		}
-
 		template <class CharT>
 		using basic_string_view = boost::basic_string_ref<CharT>;
 		using string_view = boost::string_ref;

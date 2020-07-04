@@ -545,7 +545,7 @@ namespace bsa
 
 				BSA_NODISCARD inline std::tuple<std::string, std::string, std::string> normalize(stl::string_view a_path) const
 				{
-					stl::filesystem::path path(a_path.begin(), a_path.end());
+					boost::filesystem::path path{ a_path.begin(), a_path.end() };
 					path = path.lexically_normal();
 
 					std::string file;
@@ -889,7 +889,7 @@ namespace bsa
 			archive(const archive&) = default;
 			archive(archive&&) noexcept = default;
 
-			inline archive(const stl::filesystem::path& a_path) :
+			inline archive(const boost::filesystem::path& a_path) :
 				_files(),
 				_header()
 			{
@@ -938,9 +938,9 @@ namespace bsa
 				_header.clear();
 			}
 
-			inline void read(const stl::filesystem::path& a_path)
+			inline void read(const boost::filesystem::path& a_path)
 			{
-				detail::istream_t input(a_path);
+				detail::istream_t input{ a_path };
 
 				clear();
 

@@ -198,6 +198,7 @@
     <ClInclude Include="include\bsa\tes3.hpp" />
     <ClInclude Include="include\bsa\tes4.hpp" />
     <ClInclude Include="include\bsa\tes5.hpp" />
+    <ClInclude Include="testsuite\mstream.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="testsuite\main.cpp" />

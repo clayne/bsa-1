@@ -408,7 +408,7 @@ namespace bsa
 			path_t(const path_t&) = default;
 			path_t(path_t&&) noexcept = default;
 
-			inline path_t(stl::string_view a_path) :
+			inline path_t(const boost::filesystem::path& a_path) :
 				_impl()
 			{
 				normalize(a_path);
@@ -419,7 +419,7 @@ namespace bsa
 			path_t& operator=(const path_t&) = default;
 			path_t& operator=(path_t&&) noexcept = default;
 
-			inline path_t& operator=(stl::string_view a_path)
+			inline path_t& operator=(const boost::filesystem::path& a_path)
 			{
 				normalize(a_path);
 				return *this;
@@ -448,10 +448,9 @@ namespace bsa
 			BSA_NODISCARD inline stl::string_view string_view() const { return _impl; }
 
 		private:
-			inline void normalize(stl::string_view a_path)
+			inline void normalize(const boost::filesystem::path& a_path)
 			{
-				stl::filesystem::path p(a_path.begin(), a_path.end());
-				_impl = p.lexically_normal().string();
+				_impl = a_path.lexically_normal().string();
 
 				for (auto& ch : _impl) {
 					ch = mapchar(ch);
@@ -506,7 +505,7 @@ namespace bsa
 				_endian(endian::little)
 			{}
 
-			inline istream_t(const stl::filesystem::path& a_path) :
+			inline istream_t(const boost::filesystem::path& a_path) :
 				_stream(),
 				_pos(0),
 				_endian(endian::little)
@@ -589,7 +588,7 @@ namespace bsa
 
 			inline void get(char& a_ch)
 			{
-				a_ch = static_cast<char>(ref(_pos++));
+				a_ch = ref<char>(_pos++);
 			}
 
 			template <class OutputIt>
@@ -628,16 +627,11 @@ namespace bsa
 
 			BSA_NODISCARD inline bool is_open() const { return _stream.is_open(); }
 
-			inline void open(const stl::filesystem::path& a_path)
+			inline void open(const boost::filesystem::path& a_path)
 			{
 				auto fail = false;
 				try {
-#if __cplusplus >= 201703L
-					auto path = a_path.string();
-#else
-					auto& path = a_path;
-#endif
-					_stream.open(path);
+					_stream.open(a_path);
 				} catch (...) {
 					fail = true;
 				}

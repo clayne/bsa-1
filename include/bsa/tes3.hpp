@@ -224,12 +224,6 @@ namespace bsa
 				constexpr file_hasher& operator=(const file_hasher&) noexcept = default;
 				constexpr file_hasher& operator=(file_hasher&&) noexcept = default;
 
-				BSA_NODISCARD inline hash_t operator()(stl::string_view a_path) const
-				{
-					path_t path(a_path);
-					return operator()(path);
-				}
-
 				BSA_NODISCARD inline hash_t operator()(const path_t& a_path) const
 				{
 					const auto view = a_path.string_view();
@@ -283,7 +277,7 @@ namespace bsa
 				file_t(const file_t&) = default;
 				file_t(file_t&&) noexcept = default;
 
-				inline file_t(stl::string_view a_relativePath) :
+				inline file_t(const boost::filesystem::path& a_relativePath) :
 					_hash(),
 					_block(),
 					_name(),
@@ -325,8 +319,7 @@ namespace bsa
 
 				BSA_NODISCARD constexpr std::size_t size() const noexcept { return zero_extend<std::size_t>(_block.size); }
 
-				BSA_NODISCARD inline std::string str() const { return _name; }
-				BSA_NODISCARD constexpr const std::string& str_ref() const noexcept { return _name; }
+				BSA_NODISCARD constexpr const std::string& string() const noexcept { return _name; }
 
 				BSA_NODISCARD inline stl::span<const stl::byte> get_data() const
 				{
@@ -497,7 +490,7 @@ namespace bsa
 			constexpr hash(const hash&) noexcept = default;
 			constexpr hash(hash&&) noexcept = default;
 
-			explicit inline hash(stl::string_view a_path) :
+			explicit inline hash(const boost::filesystem::path& a_path) :
 				_impl(detail::file_hasher()(a_path))
 			{}
 
@@ -506,7 +499,7 @@ namespace bsa
 			constexpr hash& operator=(const hash&) noexcept = default;
 			constexpr hash& operator=(hash&&) noexcept = default;
 
-			inline hash& operator=(stl::string_view a_path)
+			inline hash& operator=(const boost::filesystem::path& a_path)
 			{
 				_impl = detail::file_hasher()(a_path);
 				return *this;
@@ -555,13 +548,13 @@ namespace bsa
 			file(const file&) noexcept = default;
 			file(file&&) noexcept = default;
 
-			inline file(stl::string_view a_relativePath, const stl::filesystem::path& a_filePath) :
+			inline file(const boost::filesystem::path& a_relativePath, const boost::filesystem::path& a_filePath) :
 				_impl(std::make_shared<detail::file_t>(a_relativePath))
 			{
 				open_and_pack(a_filePath);
 			}
 
-			inline file(stl::string_view a_relativePath, stl::span<const stl::byte> a_data) :
+			inline file(const boost::filesystem::path& a_relativePath, stl::span<const stl::byte> a_data) :
 				_impl(std::make_shared<detail::file_t>(a_relativePath))
 			{
 				_impl->set_data(std::move(a_data));
@@ -596,16 +589,16 @@ namespace bsa
 				return _impl->get_data();
 			}
 
-			inline void extract_to(const stl::filesystem::path& a_root) const
+			inline void extract_to(const boost::filesystem::path& a_root) const
 			{
 				assert(exists());
-				if (!stl::filesystem::exists(a_root)) {
+				if (!boost::filesystem::exists(a_root)) {
 					throw output_error();
 				}
 
 				auto path = a_root;
 				path /= string();
-				stl::filesystem::create_directories(path.parent_path());
+				boost::filesystem::create_directories(path.parent_path());
 				std::ofstream file(path.c_str(), std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
 				if (!file.is_open()) {
 					throw output_error();
@@ -626,7 +619,7 @@ namespace bsa
 				_impl->set_data(std::move(a_data));
 			}
 
-			inline void pack(const stl::filesystem::path& a_path)
+			inline void pack(const boost::filesystem::path& a_path)
 			{
 				assert(exists());
 				open_and_pack(a_path);
@@ -641,7 +634,7 @@ namespace bsa
 			BSA_NODISCARD inline const std::string& string() const noexcept
 			{
 				assert(exists());
-				return _impl->str_ref();
+				return _impl->string();
 			}
 
 			inline void swap(file& a_rhs) noexcept { std::swap(*this, a_rhs); }
@@ -660,7 +653,7 @@ namespace bsa
 			BSA_NODISCARD constexpr const value_type& file_ptr() const noexcept { return _impl; }
 
 		private:
-			inline void open_and_pack(const stl::filesystem::path& a_path)
+			inline void open_and_pack(const boost::filesystem::path& a_path)
 			{
 				detail::istream_t input{ a_path };
 				_impl->set_data(std::move(input));
@@ -817,9 +810,8 @@ namespace bsa
 			archive(const archive&) = default;
 			archive(archive&&) noexcept = default;
 
-			inline archive(const stl::filesystem::path& a_path) :
+			inline archive(const boost::filesystem::path& a_path) :
 				_files(),
-				_filesByName(),
 				_header()
 			{
 				read(a_path);
@@ -846,6 +838,22 @@ namespace bsa
 			BSA_NODISCARD inline iterator end() const noexcept { return iterator(); }
 
 			BSA_NODISCARD constexpr std::size_t size() const noexcept { return file_count(); }
+
+			BSA_NODISCARD inline std::size_t size_bytes() const
+			{
+				std::size_t sz{ 0 };
+				sz += detail::header_t::block_size();
+				sz += detail::file_t::block_size() * file_count();
+				sz += sizeof(std::uint32_t) * file_count();
+				sz += _header.hash_offset() - calc_file_size();
+				sz += detail::hash_t::block_size() * file_count();
+				for (const auto& file : _files) {
+					sz += file->size();
+				}
+
+				return sz;
+			}
+
 			BSA_NODISCARD constexpr bool empty() const noexcept { return size() == 0; }
 
 			inline void clear() noexcept
@@ -857,7 +865,7 @@ namespace bsa
 			BSA_NODISCARD constexpr std::size_t file_count() const noexcept { return _header.file_count(); }
 			BSA_NODISCARD constexpr archive_version version() const noexcept { return _header.version(); }
 
-			inline void read(const stl::filesystem::path& a_path)
+			inline void read(const boost::filesystem::path& a_path)
 			{
 				detail::istream_t input(a_path);
 
@@ -881,18 +889,18 @@ namespace bsa
 				assert(sanity_check());
 			}
 
-			inline void extract(const stl::filesystem::path& a_path)
+			inline void extract(const boost::filesystem::path& a_path)
 			{
-				if (!stl::filesystem::exists(a_path)) {
+				if (!boost::filesystem::exists(a_path)) {
 					throw output_error();
 				}
 
-				stl::filesystem::path filePath;
+				boost::filesystem::path filePath;
 				std::ofstream output;
-				for (auto& file : _filesByName) {
+				for (auto& file : _files) {
 					output.close();
-					filePath = a_path / file->str_ref();
-					stl::filesystem::create_directories(filePath.parent_path());
+					filePath = a_path / file->string();
+					boost::filesystem::create_directories(filePath.parent_path());
 					output.open(filePath.c_str(), std::ios_base::out | std::ios_base::binary | std::ios_base::trunc);
 					if (!output.is_open()) {
 						throw output_error();
@@ -901,7 +909,7 @@ namespace bsa
 				}
 			}
 
-			inline void write(const stl::filesystem::path& a_path)
+			inline void write(const boost::filesystem::path& a_path)
 			{
 				std::ofstream file{ a_path.c_str(), std::ios_base::out | std::ios_base::binary | std::ios_base::trunc };
 				if (!file.is_open()) {
@@ -936,7 +944,7 @@ namespace bsa
 					file->write_hash(output);
 				}
 
-				for (const auto& file : _filesByName) {
+				for (const auto& file : _files) {
 					file->write_data(output);
 				}
 			}
@@ -948,8 +956,8 @@ namespace bsa
 				} else if (!a_file || a_file.empty()) {
 					throw empty_file{};
 				} else if (!contains(a_file)) {
-					reserve(size() + 1);
-					push_back(a_file.file_ptr());
+					_files.reserve(size() + 1);
+					_files.push_back(a_file.file_ptr());
 					sort();
 					update_size();
 				}
@@ -982,9 +990,9 @@ namespace bsa
 					throw size_error{};
 				}
 
-				reserve(size() + toInsert.size());
+				_files.reserve(size() + toInsert.size());
 				for (auto& elem : toInsert) {
-					push_back(elem);
+					_files.push_back(elem);
 				}
 
 				sort();
@@ -1012,29 +1020,11 @@ namespace bsa
 				return true;
 			}
 
-			BSA_NODISCARD inline file find(const stl::filesystem::path& a_path)
-			{
-				auto path = a_path.string();
-				return find(path);
-			}
-
-			BSA_NODISCARD inline file find(const std::string& a_path)
-			{
-				const stl::string_view path(a_path);
-				return find(path);
-			}
-
-			BSA_NODISCARD inline file find(const stl::string_view& a_path)
+			BSA_NODISCARD inline file find(const boost::filesystem::path& a_path)
 			{
 				const auto hash = detail::file_hasher()(a_path);
 				auto it = binary_find(hash);
 				return it != _files.end() ? file(*it) : file();
-			}
-
-			BSA_NODISCARD inline file find(const char* a_path)
-			{
-				const stl::string_view path(a_path);
-				return find(path);
 			}
 
 			BSA_NODISCARD inline bool contains(const file& a_file)
@@ -1064,15 +1054,6 @@ namespace bsa
 				BSA_NODISCARD inline bool operator()(const value_t& a_lhs, const detail::hash_t& a_rhs) const noexcept
 				{
 					return a_lhs->hash_ref() < a_rhs;
-				}
-			};
-
-			class file_name_sorter final
-			{
-			public:
-				BSA_NODISCARD inline bool operator()(const value_t& a_lhs, const value_t& a_rhs) const noexcept
-				{
-					return a_lhs->str_ref() < a_rhs->str_ref();
 				}
 			};
 
@@ -1145,12 +1126,9 @@ namespace bsa
 					a_files.end(),
 					std::back_inserter(merge),
 					file_sorter());
-				if (!validate_hash_offsets(merge) || !validate_name_offsets(merge)) {
-					return false;
-				}
-
-				std::sort(merge.begin(), merge.end(), file_name_sorter());
-				if (!validate_data_offsets(merge)) {
+				if (!validate_hash_offsets(merge) ||
+					!validate_name_offsets(merge) ||
+					!validate_data_offsets(merge)) {
 					return false;
 				}
 
@@ -1161,12 +1139,6 @@ namespace bsa
 			{
 				update_header();
 				update_files();
-			}
-
-			inline void push_back(value_t a_val)
-			{
-				_files.push_back(a_val);
-				_filesByName.push_back(std::move(a_val));
 			}
 
 			inline void read_data(detail::istream_t& a_input)
@@ -1208,25 +1180,19 @@ namespace bsa
 
 			inline void read_initial(detail::istream_t& a_input)
 			{
-				reserve(file_count());
+				_files.reserve(file_count());
 				for (std::size_t i = 0; i < file_count(); ++i) {
 					auto file = std::make_shared<detail::file_t>();
 					file->read(a_input);
-					push_back(std::move(file));
+					_files.push_back(std::move(file));
 				}
-			}
-
-			inline void reserve(std::size_t a_capacity)
-			{
-				_files.reserve(a_capacity);
-				_filesByName.reserve(a_capacity);
 			}
 
 			inline bool sanity_check()
 			{
 				detail::hash_t hash;
 				for (auto& file : _files) {
-					hash = detail::file_hasher()(file->str_ref());
+					hash = detail::file_hasher()({ file->string() });
 					if (hash != file->hash_ref()) {
 						return false;
 					}
@@ -1235,16 +1201,12 @@ namespace bsa
 				return true;
 			}
 
-			inline void sort()
-			{
-				std::sort(_files.begin(), _files.end(), file_sorter());
-				std::sort(_filesByName.begin(), _filesByName.end(), file_name_sorter());
-			}
+			inline void sort() { std::sort(_files.begin(), _files.end(), file_sorter()); }
 
 			inline void update_files()
 			{
 				std::size_t offset = 0;
-				for (auto& file : _filesByName) {
+				for (auto& file : _files) {
 					file->set_offset(offset);
 					offset += file->size();
 				}
@@ -1264,7 +1226,7 @@ namespace bsa
 
 			BSA_NODISCARD inline bool validate_data_offsets(const value_t& a_file)
 			{
-				return validate_offsets(_filesByName, a_file, file_name_sorter(), [](const value_t& a_val) noexcept -> std::size_t {
+				return validate_offsets(_files, a_file, file_sorter(), [](const value_t& a_val) noexcept -> std::size_t {
 					return a_val->size();
 				});
 			}
@@ -1378,11 +1340,10 @@ namespace bsa
 			}
 
 			container_t _files;
-			container_t _filesByName;
 			detail::header_t _header;
 		};
 
-		inline archive& operator<<(archive& a_archive, const stl::filesystem::path& a_path)
+		inline archive& operator<<(archive& a_archive, const boost::filesystem::path& a_path)
 		{
 			a_archive.read(a_path);
 			return a_archive;
@@ -1394,7 +1355,7 @@ namespace bsa
 			return a_archive;
 		}
 
-		inline archive& operator>>(archive& a_archive, const stl::filesystem::path& a_path)
+		inline archive& operator>>(archive& a_archive, const boost::filesystem::path& a_path)
 		{
 			a_archive.write(a_path);
 			return a_archive;

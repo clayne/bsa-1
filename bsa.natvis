@@ -13,11 +13,7 @@
 	</Type>
 	
 	<Type Name="bsa::tes3::detail::hash_t::block_t">
-		<DisplayString >{
-			(uint64_t)(uint32_t)lo &lt;&lt; 0 * 8 |
-			(uint64_t)(uint32_t)hi &lt;&lt; 4 * 8
-			,H}
-		</DisplayString>
+		<DisplayString>{hi,H} {lo,Hb}</DisplayString>
 	</Type>
 	
 	<Type Name="bsa::tes3::detail::file_t">

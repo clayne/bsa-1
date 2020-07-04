@@ -1,50 +1,25 @@
 #define BSA_PRESERVE_PADDING
 
 #include <chrono>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <sstream>
+#include <streambuf>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
+#include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 #include <boost/regex.hpp>
 
 #include "bsa/bsa.hpp"
+#include "mstream.hpp"
 
-namespace stl
-{
-	using namespace bsa::stl;
-
-	namespace filesystem
-	{
-		using namespace bsa::stl::filesystem;
-
-#if __cplusplus >= 201703L
-		using std::filesystem::directory_iterator;
-		using std::filesystem::file_size;
-		using std::filesystem::filesystem_error;
-		using std::filesystem::recursive_directory_iterator;
-		using std::filesystem::relative;
-
-		inline bool is_regular_file(const std::filesystem::directory_entry& a_entry)
-		{
-			return a_entry.is_regular_file();
-		}
-#else
-		using boost::filesystem::directory_iterator;
-		using boost::filesystem::file_size;
-		using boost::filesystem::filesystem_error;
-		using boost::filesystem::recursive_directory_iterator;
-		using boost::filesystem::relative;
-
-		inline bool is_regular_file(const boost::filesystem::directory_entry& a_entry)
-		{
-			return a_entry.status().type() == boost::filesystem::file_type::regular_file;
-		}
-#endif
-	}
-}
+namespace filesystem = boost::filesystem;
 
 enum class color
 {
@@ -55,27 +30,23 @@ enum class color
 namespace util
 {
 	template <class... Args>
-	void print(color a_color, Args... a_args)
+	void print(color a_color, Args&&... a_args)
 	{
-		constexpr const char SGR[] = "\033[0m";
-		constexpr const char RED[] = "\x1B[31m";
-		constexpr const char GREEN[] = "\x1B[32m";
-
 		std::stringstream ss;
 		switch (a_color) {
 		case color::red:
-			ss << RED;
+			ss << "\x1B[31m";
 			break;
 		case color::green:
-			ss << GREEN;
+			ss << "\x1B[32m";
 			break;
 		default:
 			assert(false);
 			return;
 		}
 
-		((ss << a_args), ...);
-		ss << SGR;
+		((ss << std::forward<Args>(a_args)), ...);
+		ss << "\033[0m";
 		std::cout << ss.str();
 	}
 }
@@ -117,62 +88,87 @@ private:
 	std::chrono::time_point<clock_t> _start;
 };
 
-void compare_files(stl::filesystem::path a_lhsP, stl::filesystem::path a_rhsP)
+void compare_files(const boost::iostreams::mapped_file_source& a_lhs, nonstd::span<const char> a_rhs)
 {
-	boost::iostreams::mapped_file_source lhsF{ a_lhsP.string() };
-	boost::iostreams::mapped_file_source rhsF{ a_rhsP.string() };
-
-	if (lhsF.size() != rhsF.size()) {
-		util::print(color::red, "FAIL (size: ", lhsF.size(), " != size: ", rhsF.size(), ")\n");
+	if (a_lhs.size() != a_rhs.size()) {
+		util::print(color::red, "FAIL (size: ", a_lhs.size(), " != size: ", a_rhs.size(), ')');
 		return;
 	}
 
-	if (std::memcmp(lhsF.data(), rhsF.data(), lhsF.size()) != 0) {
-		for (std::size_t i = 0; i < lhsF.size(); ++i) {
-			if (lhsF.data()[i] != rhsF.data()[i]) {
-				util::print(color::red, "FAIL (at pos ", i, ")\n");
+	if (std::memcmp(a_lhs.data(), a_rhs.data(), a_rhs.size()) != 0) {
+		for (std::size_t i = 0; i < a_rhs.size(); ++i) {
+			if (a_lhs.data()[i] != a_rhs.data()[i]) {
+				util::print(color::red, "FAIL (at pos ", i, ')');
 				return;
 			}
 		}
 	}
 
-	util::print(color::green, "PASS\n");
+	util::print(color::green, "PASS");
+}
+
+template <class Archive>
+void write_archives(nonstd::span<const filesystem::path> a_directories)
+{
+	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
+	Archive archive;
+
+	for (auto& dir : a_directories) {
+		try {
+			for (auto& sysEntry : filesystem::directory_iterator(dir)) {
+				if (boost::regex_match(sysEntry.path().string(), regex)) {
+					const auto& path = sysEntry.path();
+					boost::iostreams::mapped_file_source src{ path };
+					archive << path;
+
+					omemorystream os(archive.size_bytes());
+					archive >> os;
+
+					std::cout << path << ' ';
+					compare_files(src, os.span());
+					std::cout << std::endl;
+				}
+			}
+		} catch (const filesystem::filesystem_error&) {}
+	}
 }
 
 void extract_tes3()
 {
-	stl::filesystem::path path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
+	filesystem::path path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
 	bsa::tes3::archive archive{ path };
 	archive.extract("E:\\Repos\\bsa\\mytest");
 }
 
 void write_tes3()
 {
-	stl::filesystem::path lhsP{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
-	stl::filesystem::path rhsP{ "E:\\Repos\\bsa\\mytest.bsa" };
+	const std::array PATHS{
+		filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files" }
+	};
 
-	bsa::tes3::archive archive{ lhsP };
-	archive >> rhsP;
-	compare_files(lhsP, rhsP);
+	write_archives<bsa::tes3::archive>({ PATHS });
 }
 
 void repack_tes3()
 {
-	stl::filesystem::path lhsP{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
-	stl::filesystem::path rhsP{ "E:\\Repos\\bsa\\mytest.bsa" };
-
 	bsa::tes3::archive archive;
 	std::vector<bsa::tes3::file> files;
-	stl::filesystem::path root{ "E:\\Repos\\bsa\\mytest" };
-	for (auto& dirEntry : stl::filesystem::recursive_directory_iterator(root)) {
-		if (stl::filesystem::is_regular_file(dirEntry)) {
-			files.emplace_back(stl::filesystem::relative(dirEntry.path(), root).string(), dirEntry.path());
+	filesystem::path root{ "E:\\Repos\\bsa\\mytest" };
+	for (auto& dirEntry : filesystem::recursive_directory_iterator(root)) {
+		if (filesystem::is_regular_file(dirEntry)) {
+			files.emplace_back(filesystem::relative(dirEntry.path(), root).string(), dirEntry.path());
 		}
 	}
 
 	archive.insert(files.begin(), files.end());
-	archive >> rhsP;
-	compare_files(lhsP, rhsP);
+
+	filesystem::path path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
+	boost::iostreams::mapped_file_source src{ path };
+
+	omemorystream os(archive.size_bytes());
+	archive >> os;
+
+	compare_files(src, os.span());
 }
 
 void parse_tes3()
@@ -181,7 +177,7 @@ void parse_tes3()
 		"E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files"
 	};
 
-	stl::filesystem::path path;
+	filesystem::path path;
 	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
 	bsa::tes3::archive archive;
 
@@ -189,7 +185,7 @@ void parse_tes3()
 		path = PATHS[i];
 
 		try {
-			for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
+			for (auto& sysEntry : filesystem::directory_iterator(path)) {
 				if (!boost::regex_match(sysEntry.path().string(), regex)) {
 					continue;
 				}
@@ -204,7 +200,7 @@ void parse_tes3()
 					std::cout << file.string() << '\n';
 				}
 			}
-		} catch (const stl::filesystem::filesystem_error&) {}
+		} catch (const filesystem::filesystem_error&) {}
 	}
 }
 
@@ -218,7 +214,7 @@ void parse_tes4()
 		"D:\\Games\\SteamLibrary\\steamapps\\common\\Fallout New Vegas\\Data",
 	};
 
-	stl::filesystem::path path;
+	filesystem::path path;
 	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
 	bsa::tes4::archive archive;
 
@@ -226,7 +222,7 @@ void parse_tes4()
 		path = PATHS[i];
 
 		try {
-			for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
+			for (auto& sysEntry : filesystem::directory_iterator(path)) {
 				if (!boost::regex_match(sysEntry.path().string(), regex)) {
 					continue;
 				}
@@ -239,39 +235,24 @@ void parse_tes4()
 					}
 				}
 			}
-		} catch (const stl::filesystem::filesystem_error&) {}
+		} catch (const filesystem::filesystem_error&) {}
 	}
 }
 
 void write_tes4()
 {
-	// ignore "Oblivion - Meshes.bsa", valid but non-standard pack
-	constexpr const char* PATHS[] = {
-		"E:\\Games\\SteamLibrary\\steamapps\\common\\Oblivion\\Data"
+	// Oblivion
+	// * "Oblivion - Meshes.bsa", data block in non-standard order
+	// Skyrim LE
+	// * "HighResTexturePack02.bsa", lots of padding in file name block
+	// * "Skyrim - Misc.bsa", data block in non-standard order
+	const std::array PATHS{
+		//filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Oblivion\\Data" },
+		filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim\\Data" },
+		//filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim Special Edition\\Data" }
 	};
 
-	stl::filesystem::path rhsP{ "E:\\Repos\\bsa\\mytest.bsa" };
-	stl::filesystem::path path;
-	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
-	bsa::tes4::archive archive;
-
-	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
-		path = PATHS[i];
-
-		try {
-			for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
-				if (!boost::regex_match(sysEntry.path().string(), regex)) {
-					continue;
-				}
-
-				const auto& lhsP = sysEntry.path();
-				archive << lhsP;
-				archive >> rhsP;
-				std::cout << lhsP << ' ';
-				compare_files(lhsP, rhsP);
-			}
-		} catch (const stl::filesystem::filesystem_error&) {}
-	}
+	write_archives<bsa::tes4::archive>({ PATHS });
 }
 
 void parse_fo4()
@@ -280,14 +261,14 @@ void parse_fo4()
 		"E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data"
 	};
 
-	stl::filesystem::path path;
+	filesystem::path path;
 	boost::regex regex{ ".*\\.ba2$", boost::regex_constants::grep | boost::regex_constants::icase };
 	bsa::fo4::archive archive;
 
 	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
 		path = PATHS[i];
 
-		for (auto& sysEntry : stl::filesystem::directory_iterator(path)) {
+		for (auto& sysEntry : filesystem::directory_iterator(path)) {
 			if (!boost::regex_match(sysEntry.path().string(), regex)) {
 				continue;
 			}
@@ -315,28 +296,6 @@ int main(int, const char*[])
 	write_tes4();
 
 	//parse_fo4();
-
-#if 0
-	{
-		bsa::tes3::archive src("E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa");
-		bsa::tes3::archive dst;
-		std::vector<bsa::tes3::file> files;
-		if (!src.empty()) {
-			for (auto& file : src) {
-				files.push_back(file);
-			}
-
-			//files.assign(20, src.front());
-			dst.insert(files.begin(), files.end());
-			for (auto& file : files) {
-				dst >> file;
-			}
-			dst.erase(files.front());
-			//files.front().extract_to("E:\\Repos\\bsa\\mytest");
-		}
-		[[maybe_unused]] bool dummy = true;
-	}
-#endif
 
 	watch.stamp<std::chrono::milliseconds>();
 
