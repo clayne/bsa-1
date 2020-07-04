@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -133,153 +134,148 @@ void write_archives(nonstd::span<const filesystem::path> a_directories)
 	}
 }
 
-void extract_tes3()
+void parse_archives(nonstd::span<const filesystem::path> a_directories, std::function<void(const filesystem::path&)> a_functor)
 {
-	filesystem::path path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
-	bsa::tes3::archive archive{ path };
-	archive.extract("E:\\Repos\\bsa\\mytest");
+	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
+
+	for (auto& dir : a_directories) {
+		try {
+			for (auto& sysEntry : filesystem::directory_iterator(dir)) {
+				if (const auto& path = sysEntry.path(); boost::regex_match(path.string(), regex)) {
+					a_functor(path);
+				}
+			}
+		} catch (const filesystem::filesystem_error&) {}
+	}
 }
 
-void write_tes3()
+class tes3
 {
-	const std::array PATHS{
+public:
+	static void parse()
+	{
+		parse_archives(PATHS, [](const filesystem::path& a_path) {
+			archive_type archive;
+			archive << a_path;
+			for (auto& file : archive) {
+				if (!archive.contains(file)) {
+					assert(false);
+				} else if (!archive.find(file.string())) {
+					assert(false);
+				}
+				std::cout << file.string() << '\n';
+			}
+		});
+	}
+
+	static void write()
+	{
+		write_archives<archive_type>({ PATHS });
+	}
+
+	static void extract()
+	{
+		filesystem::path path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
+		archive_type archive{ path };
+		archive.extract("E:\\Repos\\bsa\\mytest");
+	}
+
+	static void repack()
+	{
+		archive_type archive;
+		std::vector<file_type> files;
+		filesystem::path root{ "E:\\Repos\\bsa\\mytest" };
+		for (auto& dirEntry : filesystem::recursive_directory_iterator(root)) {
+			if (filesystem::is_regular_file(dirEntry)) {
+				files.emplace_back(filesystem::relative(dirEntry.path(), root).string(), dirEntry.path());
+			}
+		}
+
+		archive.insert(files.begin(), files.end());
+
+		filesystem::path path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
+		boost::iostreams::mapped_file_source src{ path };
+
+		omemorystream os(archive.size_bytes());
+		archive >> os;
+
+		compare_files(src, os.span());
+	}
+
+private:
+	using archive_type = bsa::tes3::archive;
+	using file_type = bsa::tes3::file;
+
+	static inline const std::array PATHS{
 		filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files" }
 	};
 
-	write_archives<bsa::tes3::archive>({ PATHS });
-}
+	tes3() = delete;
+};
 
-void repack_tes3()
+class tes4
 {
-	bsa::tes3::archive archive;
-	std::vector<bsa::tes3::file> files;
-	filesystem::path root{ "E:\\Repos\\bsa\\mytest" };
-	for (auto& dirEntry : filesystem::recursive_directory_iterator(root)) {
-		if (filesystem::is_regular_file(dirEntry)) {
-			files.emplace_back(filesystem::relative(dirEntry.path(), root).string(), dirEntry.path());
-		}
-	}
-
-	archive.insert(files.begin(), files.end());
-
-	filesystem::path path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files\\Tribunal.bsa" };
-	boost::iostreams::mapped_file_source src{ path };
-
-	omemorystream os(archive.size_bytes());
-	archive >> os;
-
-	compare_files(src, os.span());
-}
-
-void parse_tes3()
-{
-	constexpr const char* PATHS[] = {
-		"E:\\Games\\SteamLibrary\\steamapps\\common\\Morrowind\\Data Files"
-	};
-
-	filesystem::path path;
-	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
-	bsa::tes3::archive archive;
-
-	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
-		path = PATHS[i];
-
-		try {
-			for (auto& sysEntry : filesystem::directory_iterator(path)) {
-				if (!boost::regex_match(sysEntry.path().string(), regex)) {
-					continue;
-				}
-
-				archive >> sysEntry.path();
-				for (auto& file : archive) {
-					if (!archive.contains(file)) {
-						assert(false);
-					} else if (!archive.find(file.string())) {
-						assert(false);
-					}
-					std::cout << file.string() << '\n';
+public:
+	static void parse()
+	{
+		parse_archives(PATHS, [](const filesystem::path& a_path) {
+			archive_type archive;
+			archive << a_path;
+			for (const auto& dir : archive) {
+				std::cout << dir.string() << '\n';
+				for (const auto& file : dir) {
+					std::cout << '\t' << file.string() << '\n';
 				}
 			}
-		} catch (const filesystem::filesystem_error&) {}
+		});
 	}
-}
 
-void parse_tes4()
-{
-	constexpr const char* PATHS[] = {
-		"E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim Special Edition\\Data",
-		"D:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim\\Data",
-		"D:\\Games\\SteamLibrary\\steamapps\\common\\Oblivion\\Data",
-		"D:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 3 goty\\Data",
-		"D:\\Games\\SteamLibrary\\steamapps\\common\\Fallout New Vegas\\Data",
-	};
+	static void write()
+	{
+		// Oblivion
+		// * "Oblivion - Meshes.bsa", data block in non-standard order
+		// Skyrim LE
+		// * "HighResTexturePack02.bsa", lots of padding in file name block
+		// * "Skyrim - Misc.bsa", data block in non-standard order
 
-	filesystem::path path;
-	boost::regex regex{ ".*\\.bsa$", boost::regex_constants::grep | boost::regex_constants::icase };
-	bsa::tes4::archive archive;
-
-	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
-		path = PATHS[i];
-
-		try {
-			for (auto& sysEntry : filesystem::directory_iterator(path)) {
-				if (!boost::regex_match(sysEntry.path().string(), regex)) {
-					continue;
-				}
-
-				archive.read(sysEntry.path());
-				for (auto& dir : archive) {
-					std::cout << dir.string() << '\n';
-					for (auto& file : dir) {
-						std::cout << '\t' << file.string() << '\n';
-					}
-				}
-			}
-		} catch (const filesystem::filesystem_error&) {}
+		write_archives<archive_type>({ PATHS });
 	}
-}
 
-void write_tes4()
-{
-	// Oblivion
-	// * "Oblivion - Meshes.bsa", data block in non-standard order
-	// Skyrim LE
-	// * "HighResTexturePack02.bsa", lots of padding in file name block
-	// * "Skyrim - Misc.bsa", data block in non-standard order
-	const std::array PATHS{
-		//filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Oblivion\\Data" },
+private:
+	using archive_type = bsa::tes4::archive;
+
+	static inline const std::array PATHS{
+		filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Oblivion\\Data" },
 		filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim\\Data" },
-		//filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim Special Edition\\Data" }
+		filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Skyrim Special Edition\\Data" }
 	};
 
-	write_archives<bsa::tes4::archive>({ PATHS });
-}
+	tes4() = delete;
+};
 
-void parse_fo4()
+class fo4
 {
-	constexpr const char* PATHS[] = {
-		"E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data"
-	};
-
-	filesystem::path path;
-	boost::regex regex{ ".*\\.ba2$", boost::regex_constants::grep | boost::regex_constants::icase };
-	bsa::fo4::archive archive;
-
-	for (std::size_t i = 0; i < std::extent_v<decltype(PATHS)>; ++i) {
-		path = PATHS[i];
-
-		for (auto& sysEntry : filesystem::directory_iterator(path)) {
-			if (!boost::regex_match(sysEntry.path().string(), regex)) {
-				continue;
-			}
-
-			archive.read(sysEntry.path());
-			for (auto& file : archive) {
+public:
+	static void parse()
+	{
+		parse_archives(PATHS, [](const filesystem::path& a_path) {
+			archive_type archive;
+			archive.read(a_path);
+			for (const auto& file : archive) {
 				std::cout << file.string() << '\n';
 			}
-		}
+		});
 	}
-}
+
+private:
+	using archive_type = bsa::fo4::archive;
+
+	static inline const std::array PATHS{
+		filesystem::path{ "E:\\Games\\SteamLibrary\\steamapps\\common\\Fallout 4\\Data" }
+	};
+
+	fo4() = delete;
+};
 
 int main(int, const char*[])
 {
@@ -287,15 +283,15 @@ int main(int, const char*[])
 	stopwatch watch;
 	watch.start();
 
-	//extract_tes3();
-	//repack_tes3();
-	//write_tes3();
-	//parse_tes3();
+	//tes3::extract();
+	//tes3::repack();
+	//tes3::write();
+	//tes3::parse();
 
-	//parse_tes4();
-	write_tes4();
+	tes4::parse();
+	//tes4::write();
 
-	//parse_fo4();
+	//fo4::parse();
 
 	watch.stamp<std::chrono::milliseconds>();
 

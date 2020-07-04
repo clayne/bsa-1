@@ -1244,47 +1244,55 @@ namespace bsa
 		class hash final
 		{
 		public:
-			hash() = delete;
-
-			hash(const hash&) noexcept = default;
-			hash(hash&&) noexcept = default;
+			constexpr hash() noexcept = default;
+			constexpr hash(const hash&) noexcept = default;
+			constexpr hash(hash&&) noexcept = default;
 
 			~hash() noexcept = default;
 
-			hash& operator=(const hash&) noexcept = default;
-			hash& operator=(hash&&) noexcept = default;
+			constexpr hash& operator=(const hash&) noexcept = default;
+			constexpr hash& operator=(hash&&) noexcept = default;
 
-			BSA_NODISCARD inline std::uint32_t crc() const noexcept { return _impl.get().crc(); }
-			BSA_NODISCARD inline char first_char() const noexcept { return static_cast<char>(_impl.get().first()); }
-			BSA_NODISCARD inline char last_char() const noexcept { return static_cast<char>(_impl.get().last()); }
-			BSA_NODISCARD inline std::int8_t length() const noexcept { return _impl.get().length(); }
-			BSA_NODISCARD inline std::uint64_t numeric_hash() const noexcept { return _impl.get().numeric(); }
-			BSA_NODISCARD inline char second_to_last_char() const noexcept { return static_cast<char>(_impl.get().last2()); }
+			BSA_NODISCARD constexpr std::uint32_t crc() const noexcept { return _impl.crc(); }
+			BSA_NODISCARD constexpr char first_char() const noexcept { return static_cast<char>(_impl.first()); }
+			BSA_NODISCARD constexpr char last_char() const noexcept { return static_cast<char>(_impl.last()); }
+			BSA_NODISCARD constexpr std::int8_t length() const noexcept { return _impl.length(); }
+			BSA_NODISCARD constexpr std::uint64_t numeric() const noexcept { return _impl.numeric(); }
+			BSA_NODISCARD constexpr char second_to_last_char() const noexcept { return static_cast<char>(_impl.last2()); }
 
-			inline void swap(hash& a_rhs) noexcept { std::swap(*this, a_rhs); }
+			constexpr void swap(hash& a_rhs) noexcept
+			{
+				auto tmp = std::move(*this);
+				*this = std::move(a_rhs);
+				a_rhs = std::move(tmp);
+			}
 
 		protected:
 			friend class directory;
 			friend class file;
 
-			explicit inline hash(detail::hash_t& a_rhs) noexcept :
-				_impl(std::ref(a_rhs))
+			using value_type = detail::hash_t;
+
+			explicit constexpr hash(value_type a_rhs) noexcept :
+				_impl(std::move(a_rhs))
 			{}
 
-			explicit inline hash(const detail::hash_ref& a_rhs) noexcept :
-				_impl(a_rhs)
-			{}
+			constexpr hash& operator=(value_type a_rhs) noexcept
+			{
+				_impl = std::move(a_rhs);
+				return *this;
+			}
 
 		private:
-			detail::hash_ref _impl;
+			value_type _impl;
 		};
 
-		inline void swap(hash& a_lhs, hash& a_rhs) { a_lhs.swap(a_rhs); }
+		constexpr void swap(hash& a_lhs, hash& a_rhs) { a_lhs.swap(a_rhs); }
 
 		class file final
 		{
 		public:
-			file() = delete;
+			file() noexcept = default;
 			file(const file&) noexcept = default;
 			file(file&&) noexcept = default;
 
@@ -1293,10 +1301,32 @@ namespace bsa
 			file& operator=(const file&) noexcept = default;
 			file& operator=(file&&) noexcept = default;
 
-			BSA_NODISCARD inline const char* c_str() const noexcept { return _impl->c_str(); }
-			BSA_NODISCARD inline tes4::hash hash() const noexcept { return tes4::hash{ _impl->hash_ref() }; }
-			BSA_NODISCARD inline std::size_t size() const noexcept { return _impl->size(); }
-			BSA_NODISCARD inline const std::string& string() const noexcept { return _impl->string(); }
+			BSA_NODISCARD inline explicit operator bool() const noexcept { return exists(); }
+			BSA_NODISCARD inline bool exists() const noexcept { return static_cast<bool>(_impl); }
+
+			BSA_NODISCARD inline const char* c_str() const noexcept
+			{
+				assert(exists());
+				return _impl->c_str();
+			}
+
+			BSA_NODISCARD inline tes4::hash hash() const noexcept
+			{
+				assert(exists());
+				return tes4::hash{ _impl->hash_ref() };
+			}
+
+			BSA_NODISCARD inline std::size_t size() const noexcept
+			{
+				assert(exists());
+				return _impl->size();
+			}
+
+			BSA_NODISCARD inline const std::string& string() const noexcept
+			{
+				assert(exists());
+				return _impl->string();
+			}
 
 			inline void swap(file& a_rhs) noexcept { std::swap(*this, a_rhs); }
 
@@ -1308,6 +1338,12 @@ namespace bsa
 			explicit inline file(value_type a_rhs) noexcept :
 				_impl(std::move(a_rhs))
 			{}
+
+			inline file& operator=(value_type a_rhs)
+			{
+				_impl = std::move(a_rhs);
+				return *this;
+			}
 
 		private:
 			value_type _impl;
@@ -1324,47 +1360,26 @@ namespace bsa
 			using pointer = value_type*;
 			using iterator_category = std::input_iterator_tag;
 
-			constexpr file_iterator() noexcept :
-				_files(nullptr),
-				_pos(NPOS)
-			{}
-
+			file_iterator() noexcept = default;
 			file_iterator(const file_iterator&) noexcept = default;
-
-			inline file_iterator(file_iterator&& a_rhs) noexcept :
-				_files(std::move(a_rhs._files)),
-				_pos(std::move(a_rhs._pos))
-			{
-				a_rhs._pos = NPOS;
-			}
+			file_iterator(file_iterator&&) noexcept = default;
 
 			~file_iterator() noexcept = default;
 
 			file_iterator& operator=(const file_iterator&) noexcept = default;
-
-			inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_files = std::move(a_rhs._files);
-					_pos = std::move(a_rhs._pos);
-					a_rhs._pos = NPOS;
-				}
-				return *this;
-			}
+			file_iterator& operator=(file_iterator&&) noexcept = default;
 
 			friend bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept;
 
-			BSA_NODISCARD inline reference operator*() { return fetch(); }
-			BSA_NODISCARD inline pointer operator->() { return std::addressof(fetch()); }
+			BSA_NODISCARD inline reference operator*() noexcept { return fetch(); }
+			BSA_NODISCARD inline pointer operator->() noexcept { return std::addressof(fetch()); }
 
 			// prefix
 			inline file_iterator& operator++() noexcept
 			{
-				++_pos;
-				if (_pos >= _files->size()) {
-					_files.reset();
-					_pos = NPOS;
-				}
+				assert(_iter != _end);
+				++_iter;
+				try_set();
 				return *this;
 			}
 
@@ -1381,38 +1396,41 @@ namespace bsa
 		protected:
 			friend class directory;
 
-			explicit inline file_iterator(detail::directory_ptr a_directory) :
-				_files(nullptr),
-				_pos(NPOS)
+			using iterator = typename detail::directory_t::const_iterator;
+
+			explicit inline file_iterator(iterator a_first, iterator a_last) :
+				_value(),
+				_iter(std::move(a_first)),
+				_end(std::move(a_last))
 			{
-				if (a_directory && !a_directory->empty()) {
-					_files = std::make_shared<container_type>();
-					_pos = 0;
-					for (auto& file : *a_directory) {
-						_files->push_back(value_type(file));
-					}
-				}
+				try_set();
 			}
 
 		private:
 			using container_type = std::vector<value_type>;
 
-			BSA_NODISCARD inline reference fetch()
+			BSA_NODISCARD inline reference fetch() noexcept
 			{
-				assert(_files);
-				return (*_files)[_pos];
+				assert(_iter != _end);
+				return _value;
 			}
 
-			static constexpr std::size_t NPOS{ (std::numeric_limits<std::size_t>::max)() };
+			inline void try_set()
+			{
+				if (_iter != _end) {
+					_value = *_iter;
+				}
+			}
 
-			std::shared_ptr<container_type> _files;
-			std::size_t _pos;
+			value_type _value;
+			iterator _iter;
+			iterator _end;
 		};
 
 		BSA_NODISCARD inline bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept
 		{
-			return a_lhs._files == a_rhs._files &&
-				   a_lhs._pos == a_rhs._pos;
+			assert(a_lhs._end == a_rhs._end);
+			return a_lhs._iter == a_rhs._iter;
 		}
 
 		BSA_NODISCARD inline bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
@@ -1425,7 +1443,7 @@ namespace bsa
 			using iterator = file_iterator;
 			using const_iterator = iterator;
 
-			directory() = delete;
+			directory() noexcept = default;
 			directory(const directory&) noexcept = default;
 			directory(directory&&) noexcept = default;
 
@@ -1434,13 +1452,50 @@ namespace bsa
 			directory& operator=(const directory&) noexcept = default;
 			directory& operator=(directory&&) noexcept = default;
 
-			BSA_NODISCARD inline const char* c_str() const noexcept { return _impl->c_str(); }
-			BSA_NODISCARD inline std::size_t file_count() const noexcept { return _impl->file_count(); }
-			BSA_NODISCARD inline tes4::hash hash() const noexcept { return tes4::hash{ _impl->hash_ref() }; }
-			BSA_NODISCARD inline const std::string& string() const noexcept { return _impl->str_ref(); }
+			BSA_NODISCARD inline explicit operator bool() const noexcept { return exists(); }
+			BSA_NODISCARD inline bool exists() const noexcept { return static_cast<bool>(_impl); }
 
-			BSA_NODISCARD inline iterator begin() const { return iterator(_impl); }
-			BSA_NODISCARD inline iterator end() const noexcept { return iterator(); }
+			BSA_NODISCARD inline const char* c_str() const noexcept
+			{
+				assert(exists());
+				return _impl->c_str();
+			}
+
+			BSA_NODISCARD inline std::size_t file_count() const noexcept
+			{
+				assert(exists());
+				return _impl->file_count();
+			}
+
+			BSA_NODISCARD inline tes4::hash hash() const noexcept
+			{
+				assert(exists());
+				return tes4::hash{ _impl->hash_ref() };
+			}
+
+			BSA_NODISCARD inline const std::string& string() const noexcept
+			{
+				assert(exists());
+				return _impl->str_ref();
+			}
+
+			BSA_NODISCARD inline iterator begin() const
+			{
+				if (_impl) {
+					return iterator(_impl->begin(), _impl->end());
+				} else {
+					return iterator();
+				}
+			}
+
+			BSA_NODISCARD inline iterator end() const
+			{
+				if (_impl) {
+					return iterator(_impl->end(), _impl->end());
+				} else {
+					return iterator();
+				}
+			}
 
 			inline void swap(directory& a_rhs) noexcept { std::swap(*this, a_rhs); }
 
@@ -1453,6 +1508,12 @@ namespace bsa
 			explicit inline directory(value_type a_rhs) noexcept :
 				_impl(std::move(a_rhs))
 			{}
+
+			inline directory& operator=(value_type a_rhs) noexcept
+			{
+				_impl = std::move(a_rhs);
+				return *this;
+			}
 
 		private:
 			value_type _impl;
@@ -1469,47 +1530,26 @@ namespace bsa
 			using pointer = value_type*;
 			using iterator_category = std::input_iterator_tag;
 
-			constexpr directory_iterator() noexcept :
-				_dirs(nullptr),
-				_pos(NPOS)
-			{}
-
+			directory_iterator() noexcept = default;
 			directory_iterator(const directory_iterator&) noexcept = default;
-
-			inline directory_iterator(directory_iterator&& a_rhs) noexcept :
-				_dirs(std::move(a_rhs._dirs)),
-				_pos(std::move(a_rhs._pos))
-			{
-				a_rhs._pos = NPOS;
-			}
+			directory_iterator(directory_iterator&& a_rhs) noexcept = default;
 
 			~directory_iterator() noexcept = default;
 
 			directory_iterator& operator=(const directory_iterator&) noexcept = default;
-
-			inline directory_iterator& operator=(directory_iterator&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_dirs = std::move(a_rhs._dirs);
-					_pos = std::move(a_rhs._pos);
-					a_rhs._pos = NPOS;
-				}
-				return *this;
-			}
+			directory_iterator& operator=(directory_iterator&&) noexcept = default;
 
 			friend inline bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept;
 
-			BSA_NODISCARD inline reference operator*() { return fetch(); }
-			BSA_NODISCARD inline pointer operator->() { return std::addressof(fetch()); }
+			BSA_NODISCARD inline reference operator*() noexcept { return fetch(); }
+			BSA_NODISCARD inline pointer operator->() noexcept { return std::addressof(fetch()); }
 
 			// prefix
 			inline directory_iterator& operator++() noexcept
 			{
-				++_pos;
-				if (_pos >= _dirs->size()) {
-					_dirs.reset();
-					_pos = NPOS;
-				}
+				assert(_iter != _end);
+				++_iter;
+				try_set();
 				return *this;
 			}
 
@@ -1526,42 +1566,39 @@ namespace bsa
 		protected:
 			friend class archive;
 
-			template <class InputIt>
-			explicit inline directory_iterator(InputIt a_first, InputIt a_last) :
-				_dirs(nullptr),
-				_pos(NPOS)
+			using iterator = typename std::vector<detail::directory_ptr>::const_iterator;
+
+			explicit inline directory_iterator(iterator a_first, iterator a_last) :
+				_value(),
+				_iter(std::move(a_first)),
+				_end(std::move(a_last))
 			{
-				if (a_first != a_last) {
-					_dirs = std::make_shared<container_type>();
-					_pos = 0;
-					do {
-						_dirs->push_back(
-							value_type(
-								static_cast<const detail::directory_ptr&>(*a_first)));
-						++a_first;
-					} while (a_first != a_last);
-				}
+				try_set();
 			}
 
 		private:
-			using container_type = std::vector<value_type>;
-
-			BSA_NODISCARD inline reference fetch()
+			BSA_NODISCARD inline reference fetch() noexcept
 			{
-				assert(_dirs);
-				return (*_dirs)[_pos];
+				assert(_iter != _end);
+				return _value;
 			}
 
-			static constexpr std::size_t NPOS{ (std::numeric_limits<std::size_t>::max)() };
+			inline void try_set()
+			{
+				if (_iter != _end) {
+					_value = *_iter;
+				}
+			}
 
-			std::shared_ptr<container_type> _dirs;
-			std::size_t _pos;
+			value_type _value;
+			iterator _iter;
+			iterator _end;
 		};
 
 		BSA_NODISCARD inline bool operator==(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept
 		{
-			return a_lhs._dirs == a_rhs._dirs &&
-				   a_lhs._pos == a_rhs._pos;
+			assert(a_lhs._end == a_rhs._end);
+			return a_lhs._iter == a_rhs._iter;
 		}
 
 		BSA_NODISCARD inline bool operator!=(const directory_iterator& a_lhs, const directory_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
@@ -1603,7 +1640,7 @@ namespace bsa
 			}
 
 			BSA_NODISCARD inline iterator begin() const { return iterator(_dirs.begin(), _dirs.end()); }
-			BSA_NODISCARD inline iterator end() const noexcept { return iterator(); }
+			BSA_NODISCARD inline iterator end() const { return iterator(_dirs.end(), _dirs.end()); }
 
 			BSA_NODISCARD constexpr std::size_t size() const noexcept { return file_count(); }
 
@@ -1721,8 +1758,8 @@ namespace bsa
 				}
 
 				sort();
-
-				assert(sanity_check());
+				update_all();
+				assert(check_hashes());
 			}
 
 			inline void write(const boost::filesystem::path& a_path)
@@ -1739,7 +1776,7 @@ namespace bsa
 			{
 				detail::ostream_t output{ a_output };
 
-				prepare_for_write();
+				update_all();
 
 				_header.write(output);
 
@@ -1843,22 +1880,7 @@ namespace bsa
 				return length;
 			}
 
-			inline void prepare_for_write()
-			{
-				update_header();
-				update_directories();
-				update_files();
-			}
-
-			inline void sort()
-			{
-				std::sort(_dirs.begin(), _dirs.end(), directory_sorter());
-				for (auto& dir : _dirs) {
-					dir->sort();
-				}
-			}
-
-			inline bool sanity_check()
+			inline bool check_hashes()
 			{
 				detail::hash_t dHash;
 				for (const auto& dir : _dirs) {
@@ -1880,6 +1902,21 @@ namespace bsa
 				}
 
 				return true;
+			}
+
+			inline void sort()
+			{
+				std::sort(_dirs.begin(), _dirs.end(), directory_sorter());
+				for (auto& dir : _dirs) {
+					dir->sort();
+				}
+			}
+
+			inline void update_all()
+			{
+				update_header();
+				update_directories();
+				update_files();
 			}
 
 			inline void update_directories()

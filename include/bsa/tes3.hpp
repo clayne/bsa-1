@@ -76,15 +76,9 @@ namespace bsa
 
 				constexpr void clear() noexcept { _block = block_t(); }
 
-				inline void read(istream_t& a_input)
-				{
-					_block.read(a_input);
-				}
+				inline void read(istream_t& a_input) { _block.read(a_input); }
 
-				inline void write(ostream_t& a_output) const
-				{
-					_block.write(a_output);
-				}
+				inline void write(ostream_t& a_output) const { _block.write(a_output); }
 
 			private:
 				struct block_t final
@@ -649,6 +643,12 @@ namespace bsa
 				_impl(std::move(a_rhs))
 			{}
 
+			inline file& operator=(value_type a_rhs) noexcept
+			{
+				_impl = std::move(a_rhs);
+				return *this;
+			}
+
 			BSA_NODISCARD constexpr value_type& file_ptr() noexcept { return _impl; }
 			BSA_NODISCARD constexpr const value_type& file_ptr() const noexcept { return _impl; }
 
@@ -701,33 +701,14 @@ namespace bsa
 			using pointer = value_type*;
 			using iterator_category = std::input_iterator_tag;
 
-			constexpr file_iterator() noexcept :
-				_files(nullptr),
-				_pos(NPOS)
-			{}
-
+			file_iterator() noexcept = default;
 			file_iterator(const file_iterator&) noexcept = default;
-
-			inline file_iterator(file_iterator&& a_rhs) noexcept :
-				_files(std::move(a_rhs._files)),
-				_pos(std::move(a_rhs._pos))
-			{
-				a_rhs._pos = NPOS;
-			}
+			file_iterator(file_iterator&&) noexcept = default;
 
 			~file_iterator() noexcept = default;
 
 			file_iterator& operator=(const file_iterator&) noexcept = default;
-
-			inline file_iterator& operator=(file_iterator&& a_rhs) noexcept
-			{
-				if (this != std::addressof(a_rhs)) {
-					_files = std::move(a_rhs._files);
-					_pos = std::move(a_rhs._pos);
-					a_rhs._pos = NPOS;
-				}
-				return *this;
-			}
+			file_iterator& operator=(file_iterator&&) noexcept = default;
 
 			friend bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept;
 
@@ -737,11 +718,9 @@ namespace bsa
 			// prefix
 			inline file_iterator& operator++() noexcept
 			{
-				++_pos;
-				if (_pos >= _files->size()) {
-					_files.reset();
-					_pos = NPOS;
-				}
+				assert(_iter != _end);
+				++_iter;
+				try_set();
 				return *this;
 			}
 
@@ -758,42 +737,39 @@ namespace bsa
 		protected:
 			friend class archive;
 
-			template <class InputIt>
-			explicit inline file_iterator(InputIt a_first, InputIt a_last) :
-				_files(nullptr),
-				_pos(NPOS)
+			using iterator = typename std::vector<detail::file_ptr>::const_iterator;
+
+			explicit inline file_iterator(iterator a_first, iterator a_last) :
+				_value(),
+				_iter(std::move(a_first)),
+				_end(std::move(a_last))
 			{
-				if (a_first != a_last) {
-					_files = std::make_shared<container_type>();
-					_pos = 0;
-					do {
-						_files->push_back(
-							value_type(
-								static_cast<const detail::file_ptr&>(*a_first)));
-						++a_first;
-					} while (a_first != a_last);
-				}
+				try_set();
 			}
 
 		private:
-			using container_type = std::vector<value_type>;
-
 			BSA_NODISCARD inline reference fetch() noexcept
 			{
-				assert(_files);
-				return (*_files)[_pos];
+				assert(_iter != _end);
+				return _value;
 			}
 
-			static constexpr std::size_t NPOS{ (std::numeric_limits<std::size_t>::max)() };
+			inline void try_set()
+			{
+				if (_iter != _end) {
+					_value = *_iter;
+				}
+			}
 
-			std::shared_ptr<container_type> _files;
-			std::size_t _pos;
+			value_type _value;
+			iterator _iter;
+			iterator _end;
 		};
 
 		BSA_NODISCARD inline bool operator==(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept
 		{
-			return a_lhs._files == a_rhs._files &&
-				   a_lhs._pos == a_rhs._pos;
+			assert(a_lhs._end == a_rhs._end);
+			return a_lhs._iter == a_rhs._iter;
 		}
 
 		BSA_NODISCARD inline bool operator!=(const file_iterator& a_lhs, const file_iterator& a_rhs) noexcept { return !(a_lhs == a_rhs); }
@@ -835,7 +811,7 @@ namespace bsa
 			}
 
 			BSA_NODISCARD inline iterator begin() const { return iterator(_files.begin(), _files.end()); }
-			BSA_NODISCARD inline iterator end() const noexcept { return iterator(); }
+			BSA_NODISCARD inline iterator end() const { return iterator(_files.end(), _files.end()); }
 
 			BSA_NODISCARD constexpr std::size_t size() const noexcept { return file_count(); }
 
@@ -885,8 +861,8 @@ namespace bsa
 				read_data(input);
 
 				sort();
-
-				assert(sanity_check());
+				update_all();
+				assert(check_hashes());
 			}
 
 			inline void extract(const boost::filesystem::path& a_path)
@@ -923,7 +899,7 @@ namespace bsa
 			{
 				detail::ostream_t output(a_output);
 
-				prepare_for_write();
+				update_all();
 
 				_header.write(output);
 				for (const auto& file : _files) {
@@ -1135,10 +1111,17 @@ namespace bsa
 				return true;
 			}
 
-			inline void prepare_for_write()
+			inline bool check_hashes()
 			{
-				update_header();
-				update_files();
+				detail::hash_t hash;
+				for (auto& file : _files) {
+					hash = detail::file_hasher()({ file->string() });
+					if (hash != file->hash_ref()) {
+						return false;
+					}
+				}
+
+				return true;
 			}
 
 			inline void read_data(detail::istream_t& a_input)
@@ -1188,20 +1171,13 @@ namespace bsa
 				}
 			}
 
-			inline bool sanity_check()
-			{
-				detail::hash_t hash;
-				for (auto& file : _files) {
-					hash = detail::file_hasher()({ file->string() });
-					if (hash != file->hash_ref()) {
-						return false;
-					}
-				}
-
-				return true;
-			}
-
 			inline void sort() { std::sort(_files.begin(), _files.end(), file_sorter()); }
+
+			inline void update_all()
+			{
+				update_header();
+				update_files();
+			}
 
 			inline void update_files()
 			{
